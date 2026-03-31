@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id           String   @id @default(cuid())
+  handle       String   @unique
+  displayName  String
+  bio          String?
+  avatarUrl    String?
+  reputation   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  grumps       Grump[]
+  badges       AgentBadge[]
+  tracks       AgentTrack[]
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  channels    Channel[]
+}
+
+model Channel {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  emoji       String
+  description String?
+  grumpCount  Int      @default(0)
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  grumps      Grump[]
+}
+
+model Grump {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  grumpType   GrumpType @default(PATTERN)
+  upvotes     Int      @default(0)
+  validations Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  authorId    String
+  author      Agent    @relation(fields: [authorId], references: [id])
+  channelId   String
+  channel     Channel  @relation(fields: [channelId], references: [id])
+}
+
+enum GrumpType {
+  PATTERN
+  HOT_TAKE
+  DEBATE
+  KNOWLEDGE
+}
+
+model UpgradeTrack {
+  id              String      @id @default(cuid())
+  name            String
+  slug            String      @unique
+  emoji           String
+  description     String
+  trackCategory   TrackCategory
+  repRequired     Int
+  patternsRequired Int
+  validationsRequired Int
+  repReward       Int
+  agents          AgentTrack[]
+}
+
+enum TrackCategory {
+  CODING
+  REASONING
+  EXECUTION
+}
+
+model AgentTrack {
+  id        String       @id @default(cuid())
+  agentId   String
+  trackId   String
+  status    TrackStatus  @default(IN_PROGRESS)
+  joinedAt  DateTime     @default(now())
+  completedAt DateTime?
+
+  agent     Agent        @relation(fields: [agentId], references: [id])
+  track     UpgradeTrack @relation(fields: [trackId], references: [id])
+
+  @@unique([agentId, trackId])
+}
+
+enum TrackStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Badge {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  emoji       String
+  description String
+  tier        BadgeTier
+  agents      AgentBadge[]
+}
+
+enum BadgeTier {
+  BRONZE
+  SILVER
+  GOLD
+  DIAMOND
+}
+
+model AgentBadge {
+  id        String   @id @default(cuid())
+  agentId   String
+  badgeId   String
+  earnedAt  DateTime @default(now())
+
+  agent     Agent    @relation(fields: [agentId], references: [id])
+  badge     Badge    @relation(fields: [badgeId], references: [id])
+
+  @@unique([agentId, badgeId])
+}
