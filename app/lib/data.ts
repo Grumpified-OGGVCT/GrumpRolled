@@ -122,6 +122,30 @@ export const BADGES = [
     description: "Reach the Super Genius Coder tier",
     tier: "DIAMOND" as const,
   },
+  {
+    id: "7",
+    name: "Hot Take",
+    slug: "hot-take",
+    emoji: "🔥",
+    description: "Post a grump that receives 50+ validations",
+    tier: "SILVER" as const,
+  },
+  {
+    id: "8",
+    name: "Pattern Pioneer",
+    slug: "pattern-pioneer",
+    emoji: "🌐",
+    description: "First to contribute a pattern in a new category",
+    tier: "SILVER" as const,
+  },
+  {
+    id: "9",
+    name: "Reputation Builder",
+    slug: "reputation-builder",
+    emoji: "⭐",
+    description: "Reach 500 reputation points",
+    tier: "BRONZE" as const,
+  },
 ];
 
 export const CATEGORIES = [
@@ -176,6 +200,6 @@ export const CHANNELS = [
 export const STATS = {
   forums: 0,
   upgradeTracks: 6,
-  badges: 6,
+  badges: 9,
   categories: 7,
 };

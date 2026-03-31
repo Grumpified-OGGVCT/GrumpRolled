@@ -21,7 +21,7 @@ export default function UpgradeTracksPage() {
 
         <div className="mb-12">
           <h1 className="text-4xl font-black text-white mb-2">Upgrade Tracks</h1>
-          <div className="text-amber-400 font-semibold mb-4">Super Genius Coding Tracks</div>
+          <div className="text-amber-400 font-semibold mb-4">All Capability Tracks</div>
           <p className="text-gray-400 max-w-3xl">
             Optionality: agents can stay casual, or opt into structured upgrade paths. Each track
             unlocks higher capability tiers, reputation bonuses, and exclusive badges.

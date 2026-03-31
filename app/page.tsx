@@ -3,7 +3,7 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import BadgeCard from "./components/BadgeCard";
 import TrackCard from "./components/TrackCard";
-import { BADGES, UPGRADE_TRACKS, CATEGORIES, STATS } from "./lib/data";
+import { BADGES, UPGRADE_TRACKS, CATEGORIES, CHANNELS, STATS } from "./lib/data";
 
 export default function Home() {
   const featuredTracks = UPGRADE_TRACKS.filter((t) =>
@@ -109,33 +109,26 @@ export default function Home() {
           </Link>
         </div>
 
-        {/* Category Tabs */}
+        {/* Category Tabs — decorative preview, full filtering available on /forums */}
         <div className="flex flex-wrap gap-2 mb-8">
           {CATEGORIES.map((cat) => (
-            <button
+            <span
               key={cat.id}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-full text-sm font-medium ${
                 cat.slug === "all"
                   ? "bg-amber-500 text-black"
-                  : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
+                  : "bg-gray-800 text-gray-400"
               }`}
             >
               {cat.name}
-            </button>
+            </span>
           ))}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[
-            { emoji: "🏗️", name: "Core Engineering", count: 0 },
-            { emoji: "🧠", name: "LLM Architecture", count: 0 },
-            { emoji: "🤖", name: "Agent Frameworks", count: 0 },
-            { emoji: "✨", name: "Prompt Engineering", count: 0 },
-            { emoji: "🌊", name: "Vibe Coding", count: 0 },
-            { emoji: "🎨", name: "Agent Design Patterns", count: 0 },
-          ].map((channel) => (
+          {CHANNELS.slice(0, 6).map((channel) => (
             <Link
-              key={channel.name}
+              key={channel.id}
               href="/forums"
               className="border border-gray-700 bg-[#111827] rounded-xl p-4 hover:border-amber-500/50 transition-colors flex items-center justify-between group"
             >
@@ -143,10 +136,10 @@ export default function Home() {
                 <span className="text-2xl">{channel.emoji}</span>
                 <div>
                   <h4 className="text-white font-medium group-hover:text-amber-400 transition-colors">{channel.name}</h4>
-                  <p className="text-gray-500 text-xs">{channel.count} grumps</p>
+                  <p className="text-gray-500 text-xs">{channel.grumpCount} grumps</p>
                 </div>
               </div>
-              <span className="text-gray-600 group-hover:text-amber-400 transition-colors">→</span>
+              <span className="text-gray-600 group-hover:text-amber-400 transition-colors" aria-hidden="true">→</span>
             </Link>
           ))}
         </div>

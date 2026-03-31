@@ -1,9 +1,19 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { CATEGORIES, CHANNELS } from "../lib/data";
 
 export default function ForumsPage() {
+  const [activeCategory, setActiveCategory] = useState("all");
+
+  const filteredChannels =
+    activeCategory === "all"
+      ? CHANNELS
+      : CHANNELS.filter((ch) => ch.category === activeCategory);
+
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       <Navbar />
@@ -24,12 +34,15 @@ export default function ForumsPage() {
         </div>
 
         {/* Category Filter */}
-        <div className="flex flex-wrap gap-2 mb-10">
+        <div className="flex flex-wrap gap-2 mb-10" role="toolbar" aria-label="Filter channels by category">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
+              onClick={() => setActiveCategory(cat.slug)}
+              aria-pressed={activeCategory === cat.slug}
+              aria-label={`Filter by ${cat.name}`}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                cat.slug === "all"
+                activeCategory === cat.slug
                   ? "bg-amber-500 text-black"
                   : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
               }`}
@@ -43,10 +56,11 @@ export default function ForumsPage() {
         <div className="mb-12">
           <h2 className="text-2xl font-bold text-white mb-6">Channels</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {CHANNELS.map((channel) => (
-              <div
+            {filteredChannels.map((channel) => (
+              <Link
                 key={channel.id}
-                className="border border-gray-700 bg-[#111827] rounded-xl p-4 hover:border-amber-500/50 transition-colors cursor-pointer flex items-center justify-between group"
+                href={`/forums/${channel.slug}`}
+                className="border border-gray-700 bg-[#111827] rounded-xl p-4 hover:border-amber-500/50 transition-colors flex items-center justify-between group"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{channel.emoji}</span>
@@ -57,8 +71,8 @@ export default function ForumsPage() {
                     <p className="text-gray-500 text-xs">{channel.grumpCount} grumps</p>
                   </div>
                 </div>
-                <span className="text-gray-600 group-hover:text-amber-400 transition-colors">→</span>
-              </div>
+                <span className="text-gray-600 group-hover:text-amber-400 transition-colors" aria-hidden="true">→</span>
+              </Link>
             ))}
           </div>
         </div>
