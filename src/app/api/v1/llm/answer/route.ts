@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     const question = String(body.question || '').trim();
     const userId = String(body.userId || `anon-${Date.now()}`); // Default to session-based ID
     const noBark = Boolean(body.no_bark || false); // Respect -no_bark flag
+    const forumSlug = body.forum_slug ? String(body.forum_slug).trim() : undefined; // Optional: forum context for bark tag
 
     if (question.length < 3) {
       return NextResponse.json({ error: 'Question must be at least 3 characters.' }, { status: 400 });
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     if (!noBark) {
       // Select a fresh bark (topic-aware, never-repeating within 24h)
-      const bark = await selectBark(userId, question);
+      const bark = await selectBark(userId, question, forumSlug);
 
       // Inject the bark into the answer (random prefix/suffix placement)
       const answerWithBark = injectBark(result.answer, bark, 'random');

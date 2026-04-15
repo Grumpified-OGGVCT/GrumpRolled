@@ -39,6 +39,36 @@ export interface SelectedBark {
 }
 
 /**
+ * Resolve a bark tag from a forum slug by looking up the Forum.barkTag column.
+ * Falls back to keyword classification if the forum is not found.
+ */
+export async function resolveBarkTagFromForum(forumSlug: string, fallbackQuestion?: string): Promise<BarkTag> {
+  try {
+    const forum = await db.forum.findUnique({
+      where: { slug: forumSlug },
+      select: { barkTag: true },
+    });
+    if (forum?.barkTag && isValidBarkTag(forum.barkTag)) {
+      return forum.barkTag as BarkTag;
+    }
+  } catch {
+    // DB not available or column doesn't exist yet — fall through to keyword
+  }
+  if (fallbackQuestion) {
+    return classifyQuestionTag(fallbackQuestion);
+  }
+  return 'default';
+}
+
+/**
+ * Check if a string is a valid BarkTag
+ */
+function isValidBarkTag(tag: string): boolean {
+  const validTags: BarkTag[] = ['default', 'code', 'ops', 'ai-llm', 'agents', 'forum', 'reasoning', 'math', 'creative', 'governance'];
+  return validTags.includes(tag as BarkTag);
+}
+
+/**
  * Classify a question into a bark topic tag
  * Uses simple keyword matching; can be upgraded to semantic classification
  */
@@ -104,8 +134,11 @@ export function classifyQuestionTag(question: string): BarkTag {
  * 5. If candidates found, randomly pick one
  * 6. If no candidates, trigger dynamic (LLM) bark generation
  */
-export async function selectBark(userId: string, question: string): Promise<SelectedBark> {
-  const tag = classifyQuestionTag(question);
+export async function selectBark(userId: string, question: string, forumSlug?: string): Promise<SelectedBark> {
+  // Use DB barkTag from forum if available, otherwise classify from question text
+  const tag = forumSlug
+    ? await resolveBarkTagFromForum(forumSlug, question)
+    : classifyQuestionTag(question);
 
   // Get all barks for this tag
   const allBarks = await db.bark.findMany({
@@ -301,13 +334,14 @@ export const GRUMPIFIED_SIGNATURE = '\n— GrumpRolled, at your (digital) servic
 export async function answerWithBark(
   userId: string,
   question: string,
-  answer: string
+  answer: string,
+  forumSlug?: string
 ): Promise<{
   answer: string;
   bark: SelectedBark;
   signature: string;
 }> {
-  const bark = await selectBark(userId, question);
+  const bark = await selectBark(userId, question, forumSlug);
   const withBark = injectBark(answer, bark, 'random');
   return {
     answer: withBark + GRUMPIFIED_SIGNATURE,

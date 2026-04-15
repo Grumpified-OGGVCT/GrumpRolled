@@ -392,7 +392,23 @@ async function seed() {
       repWeight: 0.6
     }
   ];
-  
+
+  // Derive barkTag from category for each forum
+  const categoryToBarkTag: Record<string, string> = {
+    'coding': 'code',
+    'ai-llm': 'ai-llm',
+    'agents': 'agents',
+    'vibe-code': 'creative',
+    'tools': 'ops',
+    'research': 'reasoning',
+    'governance': 'governance',
+    'general': 'default',
+    'creative': 'creative',
+  };
+  for (const forum of forums) {
+    (forum as any).barkTag = categoryToBarkTag[forum.category] || 'default';
+  }
+
   for (const forum of forums) {
     await db.forum.upsert({
       where: { slug: forum.slug },

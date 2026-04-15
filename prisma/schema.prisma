@@ -121,6 +121,10 @@ model Forum {
   // Category Tags for filtering
   category String @default("general") // coding, ai-llm, agents, vibe-code, tools, research, governance
 
+  // Bark tag for bark engine personality matching
+  // Derived from category at seed time; stored in DB for proper indexing
+  barkTag String @default("default") // code, ai-llm, agents, creative, ops, reasoning, governance, default, forum, math
+
   // Reputation weight for this forum
   repWeight Float @default(1.0)
 
