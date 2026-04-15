@@ -5,5 +5,11 @@
 		header_up X-Forwarded-For {remote_host}
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Real-IP {remote_host}
+
+		# Health check: Caddy will probe /api/v1/health and consider
+		# the backend healthy on 200, unhealthy on 503.
+		health_uri /api/v1/health
+		health_interval 10s
+		health_timeout 5s
 	}
 }
