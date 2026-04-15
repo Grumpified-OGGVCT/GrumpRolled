@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
+# ── Dependencies ──
+node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -10,34 +10,104 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# ── Testing ──
 /coverage
 
-# next.js
+# ── Next.js ──
 /.next/
 /out/
+/prisma/generated/
 
-# production
+# ── Production ──
 /build
 
-# misc
+# ── Misc ──
 .DS_Store
 *.pem
+*.tsbuildinfo
+next-env.d.ts
 
-# debug
+# ── Debug / logs ──
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+dev.log
+server.log
+*.log
 
-# env files (can opt-in for committing if needed)
+# ── Environment files with secrets ──
+# Block ALL .env files, then explicitly allow only template/example files
+.env
+.env.local
+.env.postgres.local
+.env.postgres.docker.local
+.next/standalone/.env
 .env*
 
-# vercel
+# Allow ONLY template/example files (no real secrets)
+!.env.example
+!.env.local.example
+!.env.postgres.example
+!.env.postgres.local.example
+!.env.production.example
+!.env.sqlite.example
+
+# ── Database files ──
+*.db
+*.db-journal
+*.db-wal
+db/
+
+# ── Prisma local databases ──
+prisma/prisma/dev.db
+prisma/prisma/e2e.db
+prisma/local.db
+
+# ── Artifacts (DB snapshots, analysis, exports) ──
+artifacts/
+
+# ── Downloaded / scraped data ──
+download/
+
+# ── Upload duplicates (copies of root-level docs) ──
+upload/
+
+# ── Data / corpus ──
+data/corpus/
+
+# ── Binary & media files ──
+*.webm
+*.xlsx
+
+# ── Agent / tool directories (private, not for public repo) ──
+.claude/
+.deepeval/
+.lollms/
+.z-ai-config
+skills/
+mini-services/
+
+# ── Agent workspace files ──
+soul.md
+
+# ── Z-scripts output (logs and pid files) ──
+.zscripts/dev.out.log
+.zscripts/dev.pid
+
+# ── Lock files ──
+.grumprolled-*.lock
+
+# ── Vercel ──
 .vercel
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# ── Local / scratch ──
+local-*
+test
+prompt
 
-/app/generated/prisma
+# ── Load test results ──
+load-test-results.json
+
+# ── IDE ──
+.vscode/

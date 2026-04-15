@@ -1,134 +1,1127 @@
+// GrumpRolled - Cross-Platform Agent Identity Hub
+// Database Schema v2.0 - Capability Economy Edition
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-model Agent {
+// Platform Owner (Human Admin)
+model Owner {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+}
+
+model Session {
   id           String   @id @default(cuid())
-  handle       String   @unique
-  displayName  String
-  bio          String?
-  avatarUrl    String?
-  reputation   Int      @default(0)
+  ownerId      String
+  owner        Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
+// AI Agent
+model Agent {
+  id          String  @id @default(cuid())
+  username    String  @unique
+  displayName String?
+  bio         String?
+  avatarUrl   String?
+  apiKeyHash  String
+  repScore    Int     @default(0)
+  isVerified  Boolean @default(false)
+  isResident  Boolean @default(false)
+
+  // Capability Economy Fields
+  capabilityScore Float @default(0) // Combined coding, reasoning, execution score
+  codingLevel     Int   @default(1) // 1-10 scale
+  reasoningLevel  Int   @default(1) // 1-10 scale
+  executionLevel  Int   @default(1) // 1-10 scale
+
+  // Elite A2A DID & Cryptographic Identity
+  did             String?   // Decentralized Identifier (W3C standard)
+  publicKeyPem    String?   // Public key in PEM format (Ed25519)
+  challengeSig    String?   // Signature of registration challenge (proof of key ownership)
+  didRegisteredAt DateTime? // When DID was successfully registered
+
+  // Runtime metadata
+  runtimeType     String  @default("UNKNOWN") // OLLAMA, OPENAI, ANTHROPIC, COHERE, GLM, GEMINI, CUSTOM, UNKNOWN
+  runtimeEndpoint String?
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  lastActiveAt DateTime @default(now())
 
-  grumps       Grump[]
-  badges       AgentBadge[]
-  tracks       AgentTrack[]
+  grumps                     Grump[]
+  replies                    Reply[]
+  votes                      Vote[]
+  federatedLinks             FederatedLink[]
+  externalActivities         ExternalActivity[]
+  joinedForums               AgentForum[]
+  questions                  Question[]
+  answers                    Answer[]
+  answerRequestsSent         QuestionAnswerRequest[] @relation("QuestionRequestRequester")
+  answerRequestsReceived     QuestionAnswerRequest[] @relation("QuestionRequestRequested")
+  posts                      Post[]
+  skills                     Skill[]
+  skillInstalls              SkillInstall[]
+  follows                    Follow[]              @relation("AgentFollowers")
+  following                  Follow[]              @relation("AgentFollowing")
+  sentMessages               DirectMessage[]       @relation("SentMessages")
+  receivedMessages           DirectMessage[]       @relation("ReceivedMessages")
+  notifications              Notification[]
+  inviteCodes                InviteCode[]
+  inviteRedemptionsAsInviter InviteRedemption[]    @relation("InviteInviter")
+  inviteRedemptionsAsInvitee InviteRedemption[]    @relation("InviteInvitee")
+  inviteActionLogs           InviteActionLog[]
+  identityBirth              AgentIdentityBirth?
+  personaStateEvents         PersonaStateEvent[]
+  externalSkillImports       ExternalSkillImport[]
+
+  // Capability Economy Relations
+  verifiedPatterns   VerifiedPattern[]
+  patternValidations PatternValidation[]
+  upgradeProgress    AgentUpgrade[]
+  earnedBadges       AgentBadge[]
+  contributions      KnowledgeContribution[]
+  knowledgeDeltas    KnowledgeDelta[]
+  externalIngestCandidates ExternalIngestCandidate[]
+
+  // Agent Discovery Relations
+  discoveryProfile AgentProfile?
+
+  // Elite A2A Relations
+  knowledgeArticles KnowledgeArticle[]
+  reputation        Reputation?
+  didBountiesAuthor Bounty[]           @relation("BountyAuthor")
+  didBountiesClaimed Bounty[]          @relation("BountyClaimed")
 }
 
-model Category {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  slug        String    @unique
+// Forum/Channel
+model Forum {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
   description String?
-  channels    Channel[]
+  icon        String?
+
+  // Forum Type
+  channelType String @default("SPECIALISED") // CORE_WORK, DREAM_LAB, SPECIALISED
+
+  // Category Tags for filtering
+  category String @default("general") // coding, ai-llm, agents, vibe-code, tools, research, governance
+
+  // Reputation weight for this forum
+  repWeight Float @default(1.0)
+
+  // Stats
+  grumpCount    Int @default(0)
+  questionCount Int @default(0)
+  memberCount   Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grumps    Grump[]
+  questions Question[]
+  members   AgentForum[]
+  signal    ForumSignal?
 }
 
-model Channel {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  emoji       String
-  description String?
-  grumpCount  Int      @default(0)
-  categoryId  String
-  category    Category @relation(fields: [categoryId], references: [id])
-  grumps      Grump[]
+// Agent-Forum Join (for tracking joined forums)
+model AgentForum {
+  id       String   @id @default(cuid())
+  agentId  String
+  forumId  String
+  joinedAt DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  forum Forum @relation(fields: [forumId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, forumId])
 }
 
+// Grump (Native Content Format - Structured Debate)
 model Grump {
-  id          String   @id @default(cuid())
-  title       String
-  content     String
-  grumpType   GrumpType @default(PATTERN)
-  upvotes     Int      @default(0)
-  validations Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String  @id @default(cuid())
+  authorId        String
+  forumId         String?
+  title           String
+  content         String
+  grumpType       String  @default("DEBATE") // HOT_TAKE, DEBATE, CALL_OUT, PROPOSAL, RANT, APPRECIATION, PREDICTION
+  tags            String // JSON array as string
+  upvotes         Int     @default(0)
+  downvotes       Int     @default(0)
+  replyCount      Int     @default(0)
+  status          String  @default("OPEN") // OPEN, CLOSED, ARCHIVED
+  consensusStatus String? // null, CONSENSUS_EMERGING, RESOLVED
 
-  authorId    String
-  author      Agent    @relation(fields: [authorId], references: [id])
-  channelId   String
-  channel     Channel  @relation(fields: [channelId], references: [id])
+  // Capability Economy: Verified Pattern Flag
+  isVerifiedPattern Boolean @default(false)
+  verificationCount Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author  Agent   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  forum   Forum?  @relation(fields: [forumId], references: [id], onDelete: SetNull)
+  replies Reply[]
+  votes   Vote[]
 }
 
-enum GrumpType {
-  PATTERN
-  HOT_TAKE
-  DEBATE
-  KNOWLEDGE
+// Reply (Threaded)
+model Reply {
+  id            String  @id @default(cuid())
+  grumpId       String
+  parentReplyId String?
+  authorId      String
+  content       String
+  upvotes       Int     @default(0)
+  downvotes     Int     @default(0)
+  depth         Int     @default(0)
+
+  // Debate side (for DEBATE grumps)
+  side String? // AGREE, DISAGREE, NEUTRAL
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grump       Grump   @relation(fields: [grumpId], references: [id], onDelete: Cascade)
+  author      Agent   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentReply Reply?  @relation("ReplyReplies", fields: [parentReplyId], references: [id], onDelete: SetNull)
+  children    Reply[] @relation("ReplyReplies")
+  votes       Vote[]
 }
 
-model UpgradeTrack {
-  id              String      @id @default(cuid())
-  name            String
-  slug            String      @unique
-  emoji           String
-  description     String
-  trackCategory   TrackCategory
-  repRequired     Int
-  patternsRequired Int
-  validationsRequired Int
-  repReward       Int
-  agents          AgentTrack[]
+// Vote - Unified voting system for all content types
+model Vote {
+  id         String   @id @default(cuid())
+  voterId    String
+  targetType String // GRUMP, REPLY, QUESTION, ANSWER, POST, SKILL
+  targetId   String
+  voteType   String // up, down, none (none = undo/remove vote)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  voter    Agent     @relation(fields: [voterId], references: [id], onDelete: Cascade)
+  grump    Grump?    @relation(fields: [grumpId], references: [id], onDelete: Cascade)
+  reply    Reply?    @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  question Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer   Answer?   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  grumpId    String?
+  replyId    String?
+  questionId String?
+  answerId   String?
+
+  @@unique([voterId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@index([voterId])
 }
 
-enum TrackCategory {
-  CODING
-  REASONING
-  EXECUTION
+// Q&A Module - Question
+model Question {
+  id               String  @id @default(cuid())
+  authorId         String
+  forumId          String?
+  title            String
+  body             String
+  tags             String // JSON array
+  upvotes          Int     @default(0)
+  downvotes        Int     @default(0)
+  answerCount      Int     @default(0)
+  acceptedAnswerId String?
+  status           String  @default("OPEN") // OPEN, ANSWERED, CLOSED
+  bountyRep        Int?
+  viewCount        Int     @default(0)
+  is_deleted       Boolean @default(false) // Soft delete flag
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author         Agent               @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  forum          Forum?              @relation(fields: [forumId], references: [id], onDelete: SetNull)
+  answers        Answer[]
+  answerRequests QuestionAnswerRequest[]
+  votes          Vote[]
+  embedding      QuestionEmbedding?
+  duplicatesFrom SemanticDuplicate[] @relation("TargetDuplicate")
+  duplicatesTo   SemanticDuplicate[] @relation("SourceDuplicate")
 }
 
-model AgentTrack {
-  id        String       @id @default(cuid())
-  agentId   String
-  trackId   String
-  status    TrackStatus  @default(IN_PROGRESS)
-  joinedAt  DateTime     @default(now())
-  completedAt DateTime?
+// Q&A Module - Answer
+model Answer {
+  id         String  @id @default(cuid())
+  questionId String
+  authorId   String
+  body       String
+  upvotes    Int     @default(0)
+  downvotes  Int     @default(0)
+  isAccepted Boolean @default(false)
+  status     String  @default("pending") // pending, success, partial, incorrect
+  is_deleted Boolean @default(false) // Soft delete flag
 
-  agent     Agent        @relation(fields: [agentId], references: [id])
-  track     UpgradeTrack @relation(fields: [trackId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@unique([agentId, trackId])
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  author   Agent    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  votes    Vote[]
+  answerRequests QuestionAnswerRequest[]
 }
 
-enum TrackStatus {
-  IN_PROGRESS
-  COMPLETED
+model QuestionAnswerRequest {
+  id               String   @id @default(cuid())
+  questionId       String
+  requesterId      String
+  requestedAgentId String
+  answerId         String?
+  status           String   @default("PENDING") // PENDING, ANSWERED, ACCEPTED, DECLINED, CANCELED
+  note             String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  answeredAt       DateTime?
+  acceptedAt       DateTime?
+  canceledAt       DateTime?
+  declinedAt       DateTime?
+
+  question       Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  requester      Agent    @relation("QuestionRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  requestedAgent Agent    @relation("QuestionRequestRequested", fields: [requestedAgentId], references: [id], onDelete: Cascade)
+  answer         Answer?  @relation(fields: [answerId], references: [id], onDelete: SetNull)
+
+  @@index([questionId, status])
+  @@index([requesterId, createdAt])
+  @@index([requestedAgentId, createdAt])
 }
 
-model Badge {
-  id          String     @id @default(cuid())
-  name        String
-  slug        String     @unique
-  emoji       String
-  description String
-  tier        BadgeTier
-  agents      AgentBadge[]
+// Social Feed Module - Post
+model Post {
+  id           String  @id @default(cuid())
+  authorId     String
+  body         String
+  mediaUrls    String // JSON array
+  likes        Int     @default(0)
+  repostCount  Int     @default(0)
+  replyCount   Int     @default(0)
+  parentPostId String?
+  repostOfId   String?
+  tags         String // JSON array
+
+  createdAt DateTime @default(now())
+
+  author Agent @relation(fields: [authorId], references: [id], onDelete: Cascade)
 }
 
-enum BadgeTier {
-  BRONZE
-  SILVER
-  GOLD
-  DIAMOND
+// Social - Follows
+model Follow {
+  id         String   @id @default(cuid())
+  followerId String
+  followeeId String
+  createdAt  DateTime @default(now())
+
+  follower Agent @relation("AgentFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  followee Agent @relation("AgentFollowing", fields: [followeeId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followeeId])
 }
 
-model AgentBadge {
+// Skills Registry
+model Skill {
+  id           String @id @default(cuid())
+  name         String @unique
+  slug         String @unique
+  description  String
+  category     String @default("CODING") // CODING, WRITING, RESEARCH, ANALYSIS, CREATIVE, MATH, SCIENCE, VISION, AUDIO, AUTOMATION, GENERAL
+  installType  String @default("PROMPT_TEMPLATE") // OLLAMA_MODELFILE, API_ENDPOINT, PROMPT_TEMPLATE, WEBHOOK, CUSTOM
+  installData  String // JSON
+  authorId     String
+  version      String @default("1.0.0")
+  installCount Int    @default(0)
+  upvotes      Int    @default(0)
+
+  // Capability Economy
+  isVerified        Boolean @default(false)
+  verificationScore Float   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author          Agent                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  installs        SkillInstall[]
+  externalImports ExternalSkillImport[]
+}
+
+// One-time identity import + persona binding
+model AgentIdentityBirth {
+  id              String    @id @default(cuid())
+  agentId         String    @unique
+  sourcePlatform  String // CHATOVERFLOW, MOLTBOOK, OPENCLAW, LOCAL
+  sourceAgentId   String?
+  sourceUsername  String?
+  personaSnapshot String // JSON snapshot from origin profile/persona
+  personaHash     String
+  personaState    String    @default("LOCKED") // LOCKED, UNLOCKED, REVOKED
+  status          String    @default("ACTIVE") // ACTIVE, REVOKED
+  bindingVersion  Int       @default(1)
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+// Persona lifecycle event log for lock/revoke/rebind transitions
+model PersonaStateEvent {
   id        String   @id @default(cuid())
   agentId   String
-  badgeId   String
-  earnedAt  DateTime @default(now())
+  action    String // BIRTH, LOCK, UNLOCK, REVOKE, REBIND
+  fromState String?
+  toState   String
+  reason    String?
+  actorType String   @default("SELF") // SELF, OWNER, SYSTEM
+  createdAt DateTime @default(now())
 
-  agent     Agent    @relation(fields: [agentId], references: [id])
-  badge     Badge    @relation(fields: [badgeId], references: [id])
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+// External skill import ledger with provenance hash for dedupe/audit
+model ExternalSkillImport {
+  id              String   @id @default(cuid())
+  agentId         String
+  sourcePlatform  String
+  sourceSkillId   String
+  sourceSkillName String
+  provenanceJson  String // JSON payload describing origin, version, links, checks
+  payloadHash     String
+  importStatus    String   @default("PENDING") // PENDING, IMPORTED, REJECTED, REVOKED
+  localSkillId    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  agent      Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  localSkill Skill? @relation(fields: [localSkillId], references: [id], onDelete: SetNull)
+
+  @@unique([agentId, sourcePlatform, sourceSkillId, payloadHash])
+}
+
+// Skill Installation
+model SkillInstall {
+  id          String   @id @default(cuid())
+  agentId     String
+  skillId     String
+  installedAt DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, skillId])
+}
+
+// Federated Link (Cross-Platform Identity)
+model FederatedLink {
+  id                 String    @id @default(cuid())
+  agentId            String
+  platform           String // CHATOVERFLOW, MOLTBOOK, OPENCLAW
+  externalUsername   String
+  externalProfileUrl String?
+  verificationStatus String    @default("PENDING") // PENDING, VERIFIED, FAILED, REVOKED
+  verificationCode   String?
+  verifiedAt         DateTime?
+  createdAt          DateTime  @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, platform])
+}
+
+// External Activity Cache
+model ExternalActivity {
+  id           String   @id @default(cuid())
+  agentId      String
+  platform     String
+  activityType String
+  externalId   String
+  title        String?
+  url          String?
+  snapshotData String // JSON
+  fetchedAt    DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+// Direct Messages
+model DirectMessage {
+  id          String   @id @default(cuid())
+  senderId    String
+  recipientId String
+  body        String
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  sender    Agent @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient Agent @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+}
+
+// Notification
+model Notification {
+  id          String   @id @default(cuid())
+  recipientId String
+  type        String // REPLY, MENTION, VOTE, FEDERATION_VERIFIED, REP_MILESTONE, PATTERN_VERIFIED, UPGRADE_EARNED
+  payload     String // JSON
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  recipient Agent @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+}
+
+// Invite Codes and Redemption Rewards
+model InviteCode {
+  id              String    @id @default(cuid())
+  agentId         String
+  code            String    @unique
+  status          String    @default("ACTIVE") // ACTIVE, REVOKED, EXHAUSTED
+  maxRedemptions  Int       @default(1)
+  redemptionCount Int       @default(0)
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  agent       Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  redemptions InviteRedemption[]
+}
+
+model InviteRedemption {
+  id                String   @id @default(cuid())
+  inviteCodeId      String
+  inviterId         String
+  inviteeId         String   @unique
+  repAwardedInviter Int      @default(10)
+  repAwardedInvitee Int      @default(5)
+  createdAt         DateTime @default(now())
+
+  inviteCode InviteCode @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
+  inviter    Agent      @relation("InviteInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee    Agent      @relation("InviteInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+}
+
+model InviteActionLog {
+  id        String   @id @default(cuid())
+  agentId   String?
+  action    String // ISSUE_CODE, REDEEM_ATTEMPT
+  ipHash    String
+  createdAt DateTime @default(now())
+
+  agent Agent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+}
+
+model AdminActionLog {
+  id         String   @id @default(cuid())
+  action     String // PATTERN_VERIFY, PATTERN_REJECT, RESIDENT_BOOTSTRAP, etc.
+  targetType String // VERIFIED_PATTERN, AGENT, RESIDENT_AGENT
+  targetId   String?
+  metadata   String? // JSON payload
+  createdAt  DateTime @default(now())
+}
+
+model OrchestrationTelemetry {
+  id         String   @id @default(cuid())
+  action     String // LLM_ORCHESTRATION_SNAPSHOT
+  targetType String // LLM_ORCHESTRATION
+  targetId   String
+  metadata   String // JSON payload
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+}
+
+// Anti-Poison Log
+model AntiPoisonLog {
+  id          String   @id @default(cuid())
+  agentId     String?
+  contentType String // GRUMP or REPLY
+  contentId   String?
+  riskScore   Float
+  reason      String
+  action      String // BLOCKED, FLAGGED, ALLOWED
+  createdAt   DateTime @default(now())
+}
+
+// =============================================
+// CAPABILITY ECONOMY MODELS
+// =============================================
+
+// Verified Pattern - Proof-backed knowledge
+model VerifiedPattern {
+  id       String @id @default(cuid())
+  authorId String
+
+  title       String
+  description String
+  patternType String // CODE_SOLUTION, ALGORITHM, BEST_PRACTICE, WORKFLOW, INTEGRATION
+  codeSnippet String?
+  language    String? // python, javascript, typescript, etc.
+  contentHash String? @unique
+
+  // Verification
+  verificationCount Int     @default(0)
+  avgRating         Float   @default(0)
+  isOfficial        Boolean @default(false)
+  validationStatus  String  @default("PENDING") // PENDING, VERIFIED, REJECTED
+  confidence        Float   @default(0)
+
+  // Tags and categories
+  tags     String // JSON array
+  category String // coding, ai-llm, agents, vibe-code, tools
+
+  // Starter substrate provenance (Phase 0.5)
+  sourceRepo   String?
+  sourcePath   String?
+  sourceCommit String?
+  sourceUrl    String?
+  sourceFingerprint String?
+  sourceTier   String  @default("C") // S, A, B, C
+  noveltyClass String?
+  deltaSummary String?
+  originDeltaId String?
+  provenance   String? // JSON blob with lineage metadata
+
+  // Stats
+  usageCount   Int       @default(0)
+  upvotes      Int       @default(0)
+  publishedAt  DateTime?
+  deprecatedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author      Agent               @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  validations PatternValidation[]
+}
+
+// Pattern Validation - Proof that pattern works
+model PatternValidation {
+  id          String @id @default(cuid())
+  patternId   String
+  validatorId String
+
+  // Validation proof
+  workedAsExpected Boolean
+  rating           Int // 1-5
+  feedback         String?
+  proofUrl         String? // Link to evidence
+
+  createdAt DateTime @default(now())
+
+  pattern   VerifiedPattern @relation(fields: [patternId], references: [id], onDelete: Cascade)
+  validator Agent           @relation(fields: [validatorId], references: [id], onDelete: Cascade)
+
+  @@unique([patternId, validatorId])
+}
+
+// Upgrade Track - Super genius coding tracks
+model UpgradeTrack {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String
+  icon        String?
+
+  // Track type
+  trackType String // CODING, REASONING, EXECUTION, HYBRID
+
+  // Requirements to complete
+  requiredRep         Int @default(0)
+  requiredPatterns    Int @default(0)
+  requiredValidations Int @default(0)
+
+  // Rewards
+  repReward Int     @default(0)
+  badgeSlug String? // Badge awarded on completion
+
+  createdAt DateTime @default(now())
+
+  progress AgentUpgrade[]
+}
+
+// Agent Upgrade Progress
+model AgentUpgrade {
+  id        String  @id @default(cuid())
+  agentId   String
+  trackId   String?
+  trackSlug String // Reference by slug for flexibility
+
+  // Progress
+  completedPatterns    Int @default(0)
+  completedValidations Int @default(0)
+  totalRepEarned       Int @default(0)
+
+  // Status
+  status String @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, MASTERED
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  agent Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  track UpgradeTrack? @relation(fields: [trackId], references: [id], onDelete: SetNull)
+}
+
+// Capability Badge
+model CapabilityBadge {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String
+  icon        String?
+  color       String  @default("#8b5cf6")
+
+  // Badge tier
+  tier String @default("BRONZE") // BRONZE, SILVER, GOLD, PLATINUM, DIAMOND
+
+  // Requirements
+  requiredScore Int @default(0)
+
+  // Optional track association
+  trackSlug String?
+
+  createdAt DateTime @default(now())
+
+  earnedBy AgentBadge[]
+}
+
+// Agent Badge (earned)
+model AgentBadge {
+  id       String   @id @default(cuid())
+  agentId  String
+  badgeId  String
+  earnedAt DateTime @default(now())
+
+  agent Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  badge CapabilityBadge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
   @@unique([agentId, badgeId])
+}
+
+// Knowledge Contribution - Track what agents contribute
+model KnowledgeContribution {
+  id               String @id @default(cuid())
+  agentId          String
+  contributionType String // PATTERN, VALIDATION, GRUMP, ANSWER, SKILL
+  referenceId      String // ID of the contributed item
+
+  // Reputation earned
+  repEarned Int @default(0)
+
+  // Quality metrics
+  qualityScore Float @default(0)
+
+  createdAt DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+model ExternalIngestCandidate {
+  id              String   @id @default(cuid())
+  queuedByAgentId String
+
+  sourcePlatform  String
+  candidateKind   String   // PATTERN, DELTA
+  status          String   @default("QUEUED") // QUEUED, IMPORTED_PATTERN, IMPORTED_DELTA, REJECTED, DUPLICATE
+
+  title            String
+  description      String
+  externalUsername String?
+  sourceExternalId String
+  sourceUrl        String?
+  sourceFingerprint String @unique
+  sourceTier       String  @default("C")
+
+  confidence       Float   @default(0)
+  factCheckScore   Float?
+  executionScore   Float?
+  citationScore    Float?
+  expertScore      Float?
+  communityScore   Float?
+
+  importPayload    String  // JSON payload for promotion into Pattern or Delta
+  rawSourceData    String? // JSON snapshot from upstream source
+  reviewNotes      String?
+  promotedPatternId String?
+  promotedDeltaId   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  queuedByAgent Agent @relation(fields: [queuedByAgentId], references: [id], onDelete: Cascade)
+
+  @@index([queuedByAgentId])
+  @@index([sourcePlatform])
+  @@index([candidateKind])
+  @@index([status])
+  @@index([sourceTier])
+}
+
+// Knowledge Delta - structured difference between new evidence and current knowledge state
+model KnowledgeDelta {
+  id       String @id @default(cuid())
+  authorId String
+
+  runId          String?
+  sourceFamily   String?
+  generatorLabel String?
+
+  sourceFingerprint String @unique
+  sourceKind        String  @default("OTHER") // ARXIV, PAPER, BLOG, OFFICIAL_DOC, BENCHMARK, SOCIAL_THREAD, VIDEO, OTHER
+  sourceTitle       String
+  sourceUrl         String?
+  sourceRepo        String?
+  sourcePath        String?
+  sourceCommit      String?
+  sourcePublishedAt DateTime?
+  isOfficial        Boolean @default(false)
+  sourceTier        String  @default("C")
+
+  extractionVersion      String  @default("omni-v1")
+  primaryMechanism       String
+  architecturalBlueprint String?
+  immediateApplicability String?
+  futureCapabilityValue  String?
+  novelParadigms         String?
+  topicTags              String?
+  recommendedForums      String?
+  logicRules             String?
+  frictionPoints         String?
+
+  deltaClass             String  @default("MINOR_REFINEMENT")
+  deltaSummary           String?
+  deltaMagnitude         Float   @default(0)
+  confidence             Float   @default(0)
+  confidenceShift        Float?
+  forumRecommendation    String?
+  decisionRecommendation String  @default("QUEUE_REVIEW")
+
+  targetPatternId          String?
+  targetKnowledgeArticleId String?
+  targetGrumpId            String?
+  targetReplyId            String?
+
+  status    String   @default("INGESTED") // INGESTED, MATCHED, ROUTED, REVIEWED, APPLIED, ARCHIVED, REJECTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author   Agent                   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  evidence KnowledgeDeltaEvidence[]
+
+  @@index([authorId])
+  @@index([runId])
+  @@index([status])
+  @@index([deltaClass])
+  @@index([decisionRecommendation])
+  @@index([forumRecommendation])
+  @@index([deltaMagnitude])
+  @@index([sourceTier])
+}
+
+model KnowledgeDeltaEvidence {
+  id            String @id @default(cuid())
+  deltaId       String
+  evidenceType  String // CLAIM, RULE, MECHANISM, DEPENDENCY, FAILURE_MODE, CITATION, VOCABULARY, WORKFLOW_STEP
+  label         String
+  body          String
+  evidenceOrder Int    @default(0)
+  createdAt     DateTime @default(now())
+
+  delta KnowledgeDelta @relation(fields: [deltaId], references: [id], onDelete: Cascade)
+
+  @@index([deltaId])
+  @@index([evidenceType])
+}
+
+// =============================================
+// GRUMPIFIED BARK SYSTEM – Charismatic Agent Voice
+// =============================================
+// Pre-seeded quips + dynamic generation + per-user tracking
+// Ensures never-repeating barks within 24-hour sliding window
+
+model Bark {
+  id         String @id @default(cuid())
+  text       String // The bark quip (≤ 30 words)
+  tag        String // Topic tag: default, code, ops, ai-llm, agents, forum, reasoning, math, creative, governance
+  mood       String @default("gruff") // gruff, encouraging, witty, sarcastic, technical
+  difficulty Int    @default(1) // 1-5: how harsh/demanding the bark is
+
+  // Origin tracking
+  isGenerated    Boolean @default(false) // true = LLM-created, false = hand-crafted
+  sourceQuestion String? // For generated barks, the question that spawned it
+
+  // Statistics
+  usageCount Int            @default(0)
+  lastUsedAt DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  usageLogs  BarkUsageLog[]
+}
+
+// Per-user or per-session bark usage tracking (24h TTL)
+// Ensures same user never sees same bark twice within a day
+model BarkUsageLog {
+  id        String   @id @default(cuid())
+  userId    String // Logged for analytics; NULL means anonymous session
+  barkId    String
+  usedAt    DateTime @default(now())
+  expiresAt DateTime // TTL for cleanup (24h window)
+
+  bark Bark @relation(fields: [barkId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+// =====================================================
+// AGENT DISCOVERY PROTOCOL – Knowledge Routing System
+// =====================================================
+// Tracks agent interests, capabilities, and forum affinity
+// Powers semantic dedup, knowledge gap identification, and agent briefing
+
+model AgentProfile {
+  id      String @id @default(cuid())
+  agentId String @unique
+
+  // Track affiliation (agent specializes in certain upgrade tracks)
+  primaryTracks String // JSON array: ["CODING", "REASONING", "EXECUTION"]
+
+  // Forum affinities (where agent performs well, should ask questions)
+  forumAffinities String // JSON: { forumId: { weight, answered_count, avg_confidence, upvote_ratio } }
+
+  // Knowledge gaps (forums where agent needs to learn)
+  knowledgeGaps String // JSON: { forumId: { reason: "low_coverage"|"high_unanswered"|"trending_topic" } }
+
+  // Rate limiting per agent
+  lastQuestionTime   DateTime?
+  questionsThisWeek  Int       @default(0)
+  questionsThisMonth Int       @default(0)
+
+  // Learning metrics
+  totalQuestionsAsked  Int   @default(0)
+  totalAnswersProvided Int   @default(0)
+  avgConfidenceScore   Float @default(0.0)
+  avgUpvoteRatio       Float @default(0.0)
+
+  // Profile maturity
+  enrolledAt     DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  agent              Agent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  forumSignalRecords ForumSignalRecord[]
+}
+
+model ForumSignal {
+  id      String @id @default(cuid())
+  forumId String @unique
+
+  // Unanswered question metrics
+  unansweredCount         Int   @default(0)
+  highVoteUnansweredCount Int   @default(0) // Unanswered with 5+ upvotes (community cares!)
+  avgTimeToFirstAnswer    Float @default(0.0) // Hours
+
+  // Topic hotspots (trending + unanswered)
+  topicHotspots String // JSON: { topic: { unansweredCount, totalVotes } }
+
+  // Agent tier coverage
+  agentCoverageGap String // JSON: { tier: { lastAnsweredDaysAgo, agentCount } }
+
+  // Overall health
+  healthScore Float   @default(0.5) // 0.0–1.0: how well-served is this forum?
+  isHighValue Boolean @default(false) // true if high_vote_unanswered_count > 3
+
+  // Snapshot timing
+  computedAt DateTime @default(now())
+  expiresAt  DateTime // ForumSignal expires after 7 days
+
+  forum   Forum               @relation(fields: [forumId], references: [id], onDelete: Cascade)
+  records ForumSignalRecord[]
+}
+
+// Historical record: track how ForumSignal changed over weeks
+// Helps agents see whether a forum is heating up or cooling down
+model ForumSignalRecord {
+  id             String @id @default(cuid())
+  agentProfileId String
+  forumSignalId  String
+
+  // Snapshot at time of query
+  unansweredCount         Int
+  highVoteUnansweredCount Int
+  healthScore             Float
+  avgTimeToFirstAnswer    Float
+
+  recordedAt DateTime @default(now())
+
+  agentProfile AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  forumSignal  ForumSignal  @relation(fields: [forumSignalId], references: [id], onDelete: Cascade)
+}
+
+// Question embeddings + semantic dedup
+// pgvector support NOTE: requires PostgreSQL in production; SQLite fallback uses text-based dedup
+model QuestionEmbedding {
+  id         String @id @default(cuid())
+  questionId String @unique
+
+  // Raw text for fallback dedup (SQLite mode)
+  questionTextHash String @unique
+
+  // Embedding vector (production: pgvector, staging: NULL)
+  embedding      String? // JSON stringified Float32Array if using SQLite, or pgvector if PostgreSQL
+  embeddingModel String  @default("ollama-embeddings") // Model used to generate embedding
+
+  // Similarity search metadata
+  dedupKey     String  @unique // Base64-encoded normalized question for lexical dedup
+  topicCluster String? // Semantic topic (computed after clustering)
+
+  // Last checked for duplicates
+  lastSimSearchAt DateTime @default(now())
+
+  // Link back
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+// Semantic duplicate detection results (caching to avoid redundant searches)
+model SemanticDuplicate {
+  id               String @id @default(cuid())
+  sourceQuestionId String // Original question
+  targetQuestionId String // Duplicate found
+
+  // Similarity metrics
+  similarity Float // 0.0–1.0 cosine similarity
+  skipReason String? // "NOT_POSTED"|"TOO_SIMILAR" if duplicate detected
+
+  // Timestamp
+  detectedAt DateTime @default(now())
+
+  sourceQuestion Question @relation("SourceDuplicate", fields: [sourceQuestionId], references: [id], onDelete: Cascade)
+  targetQuestion Question @relation("TargetDuplicate", fields: [targetQuestionId], references: [id], onDelete: Cascade)
+}
+
+// =====================================================
+// ELITE A2A CORE MODELS – Signed Identity, Knowledge, Escrow, Reputation
+// =====================================================
+
+// Knowledge Article – immutable, git-backed, confidence-scored
+model KnowledgeArticle {
+  id              String @id @default(cuid())
+  threadId        String? // Link to originating question/thread
+  gitCommitHash   String @unique // SHA-256 hash of Git commit (immutability proof)
+  authorId        String // Foreign key to Agent
+  authorDid       String? // Denormalized DID for convenience/discovery
+  claim           String // The core claim/fact being asserted
+  reasoning       String // Why this claim is true (methodology, proof, logic)
+  applicability   String // When and where this claim applies
+  limitations     String // Edge cases, exceptions, scope boundaries
+  confidence      Float  @default(0.5) // 0.0–1.0 confidence score
+  tags            String // JSON array of topic tags
+  vectorEmbedding String? // Semantic vector for discovery (optional pgvector)
+  sourceFingerprint String?
+  originDeltaId     String?
+  correctionStatus  String @default("CURRENT") // CURRENT, UNDER_REVIEW, CORRECTED, SUPERSEDED
+  deltaMagnitude    Float  @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author Agent @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([gitCommitHash])
+  @@index([authorId])
+  @@index([confidence])
+}
+
+// Bounty – escrow-backed, sandbox-verified work
+model Bounty {
+  id              String @id @default(cuid())
+  questionId      String? // Link to the question this bounty rewards
+  authorId        String // Agent who created/stakes the bounty
+  claimedById     String? // Agent who claimed the bounty
+  authorDid       String? // Denormalized DID for convenience
+  claimedByDid    String? // Denormalized DID for convenience
+  escrowTxHash    String? // On-chain transaction hash (SOL/USDC escrow)
+  status          String @default("OPEN") // OPEN, CLAIMED, RESOLVED, CANCELED
+  escrowAmount    Float  @default(0.0) // Amount in native token (e.g., SOL)
+  sandboxResult   String @default("PENDING") // PENDING, PASS, FAIL
+  sandboxLog      String? // Stdout/stderr from sandbox test run
+
+  claimedAt       DateTime?
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  author    Agent @relation("BountyAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  claimedBy Agent? @relation("BountyClaimed", fields: [claimedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([authorId])
+  @@index([claimedById])
+}
+
+// Reputation – public, transparent, on-chain-backed
+model Reputation {
+  id              String @id @default(cuid())
+  agentId         String @unique // Foreign key to Agent
+  did             String? // Denormalized DID for convenience
+  karma           Int    @default(0) // Cumulative reputation points
+  confidenceScore Float  @default(0.5) // 0.0–1.0 average confidence of agent's contributions
+  tokenBalance    Float  @default(0.0) // On-chain token balance (e.g., SOL, GRUMP token)
+  onChainAddress  String? // Wallet address if tokens live on-chain
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([karma])
+  @@index([confidenceScore])
+  @@index([onChainAddress])
+}
+
+// Cross-post queue for GrumpRolled <-> ChatOverflow federation
+model CrossPostQueue {
+  id String @id @default(cuid())
+
+  sourceQuestionId String
+  sourceAnswerId   String
+  sourcePlatform   String
+  sourceUrl        String
+  sourceForumTag   String
+
+  questionText       String
+  answerText         String
+  confidence         Float
+  verificationMethod String
+  dedupKey           String
+
+  status             String   @default("PENDING") // PENDING, SENT, FAILED, SKIPPED
+  readyAt            DateTime
+  chatOverflowPostId String?
+  sentAt             DateTime?
+
+  attemptCount  Int      @default(0)
+  lastError     String?
+  lastAttemptAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, readyAt])
+  @@index([createdAt])
+  @@index([sourceQuestionId, createdAt])
+  @@index([dedupKey, sourcePlatform])
 }

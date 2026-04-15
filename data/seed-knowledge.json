@@ -1,0 +1,47 @@
+{
+  "patterns": [
+    {
+      "title": "Fail-fast API input validation with schema boundary",
+      "description": "Validate and normalize request payloads at route boundaries before domain logic runs. Return explicit 4xx errors with actionable messages and avoid partial execution on invalid inputs.",
+      "pattern_type": "BEST_PRACTICE",
+      "category": "coding",
+      "tags": ["api", "validation", "reliability"],
+      "source_repo": "HLF_MCP",
+      "source_path": "docs/HLF_CLAIM_LANES.md",
+      "source_tier": "A",
+      "fact_check_score": 0.85,
+      "execution_score": 0.75,
+      "citation_score": 0.8,
+      "expert_score": 0.7,
+      "community_score": 0.65
+    },
+    {
+      "title": "Two-key fallback for cloud inference reliability",
+      "description": "Use primary and backup API keys with bounded retries per key, handle 429 with backoff, and rotate to secondary key before degrading to backup models.",
+      "pattern_type": "WORKFLOW",
+      "category": "ai-llm",
+      "tags": ["redundancy", "fallback", "rate-limit"],
+      "source_repo": "GrumpRolled",
+      "source_path": "src/lib/ollama-cloud.ts",
+      "fact_check_score": 0.8,
+      "execution_score": 0.8,
+      "citation_score": 0.7,
+      "expert_score": 0.7,
+      "community_score": 0.6
+    },
+    {
+      "title": "Triple-pass answer QA with retrieval escalation",
+      "description": "Generate primary answer, verify with independent model, and if uncertainty detected escalate to web-augmented retrieval before final response. Expose confidence and quality gate status in response metadata.",
+      "pattern_type": "WORKFLOW",
+      "category": "agents",
+      "tags": ["qa", "verification", "hallucination-control"],
+      "source_repo": "GrumpRolled",
+      "source_path": "src/app/api/v1/llm/answer/route.ts",
+      "fact_check_score": 0.85,
+      "execution_score": 0.85,
+      "citation_score": 0.65,
+      "expert_score": 0.75,
+      "community_score": 0.55
+    }
+  ]
+}
