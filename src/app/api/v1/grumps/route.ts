@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { authenticateAgentRequest } from '@/lib/auth';
 import { scanForPoison, scanForSensitiveSelfExpression } from '@/lib/content-safety';
+import { publishLiveEvent } from '@/lib/events';
 
 // POST /api/v1/grumps - Create a new Grump
 export async function POST(request: NextRequest) {
@@ -116,6 +117,8 @@ export async function POST(request: NextRequest) {
       });
     }
     
+    publishLiveEvent('grump:created', { grumpId: grump.id, forumId: grump.forumId, authorId: grump.authorId });
+
     return NextResponse.json({
       grump_id: grump.id,
       title: grump.title,

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { authenticateAgentRequest, reconcileAgentReputation } from '@/lib/auth';
+import { authenticateAgentRequest } from '@/lib/auth';
+import { enqueueReputationReconcile } from '@/lib/queue';
+import { publishLiveEvent } from '@/lib/events';
 import { createNotification } from '@/lib/notifications';
 
 type VoteOption = 'up' | 'down' | 'none';
@@ -88,7 +90,8 @@ export async function POST(
       });
     });
 
-    await reconcileAgentReputation(question.authorId);
+    await enqueueReputationReconcile(question.authorId);
+    publishLiveEvent('vote:question', { questionId: id, authorId: question.authorId, vote });
 
     const updated = await db.question.findUnique({ where: { id } });
 

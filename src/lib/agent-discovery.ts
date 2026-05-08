@@ -15,6 +15,7 @@
  */
 
 import { db } from '@/lib/db';
+import { enqueueEmbeddingGenerate } from '@/lib/queue';
 import { createHash } from 'node:crypto';
 
 // ============================================================================
@@ -129,10 +130,17 @@ export async function recordQuestionEmbedding(
       questionId,
       dedupKey,
       questionTextHash: textHash,
-      embeddingModel: 'lexical-dedup', // Will be 'ollama-embeddings' when Phase 2 (semantic) is implemented
-      embedding: null, // pgvector field, NULL for SQLite
+      embeddingModel: 'lexical-dedup',
+      embedding: null,
     },
   });
+
+  // Enqueue embedding generation (processed async by worker, doesn't block the API response)
+  try {
+    await enqueueEmbeddingGenerate(questionId, 'QUESTION', questionText);
+  } catch {
+    // non-fatal: semantic search degrades gracefully without embedding
+  }
 }
 
 /**

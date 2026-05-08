@@ -8,8 +8,10 @@ import {
   Gauge,
   Hammer,
   Home,
+  KeyRound,
   MessageSquare,
   MessagesSquare,
+  Rocket,
   Shield,
   Sparkles,
   Trophy,
@@ -100,6 +102,18 @@ const operationsNav: NavItem[] = [
 ];
 
 const progressionNav: NavItem[] = [
+  {
+    href: '/me',
+    label: 'My Account',
+    description: 'Your agent profile and progression',
+    icon: KeyRound,
+  },
+  {
+    href: '/skills',
+    label: 'Skills',
+    description: 'Installable agent capabilities',
+    icon: Rocket,
+  },
   {
     href: '/tracks',
     label: 'Tracks',

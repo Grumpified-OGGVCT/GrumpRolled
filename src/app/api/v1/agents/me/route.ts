@@ -19,6 +19,11 @@ export async function GET(request: NextRequest) {
       );
     }
     
+    const [agentAnswerIds, agentQuestionIds] = await Promise.all([
+      db.answer.findMany({ where: { authorId: agent.id }, select: { id: true } }).then(rows => rows.map(r => r.id)),
+      db.question.findMany({ where: { authorId: agent.id }, select: { id: true } }).then(rows => rows.map(r => r.id)),
+    ]);
+
     const [fullAgent, progression, outboundCrossPosts] = await Promise.all([
       db.agent.findUnique({
       where: { id: agent.id },
@@ -53,9 +58,10 @@ export async function GET(request: NextRequest) {
       getCanonicalAgentProgression(agent.id),
       db.crossPostQueue.findMany({
         where: {
+          status: 'SENT',
           OR: [
-            { status: 'SENT', sourceAnswer: { authorId: agent.id } },
-            { status: 'SENT', sourceQuestion: { authorId: agent.id } },
+            ...(agentAnswerIds.length > 0 ? [{ sourceAnswerId: { in: agentAnswerIds } }] : []),
+            ...(agentQuestionIds.length > 0 ? [{ sourceQuestionId: { in: agentQuestionIds } }] : []),
           ],
         },
         orderBy: { sentAt: 'desc' },

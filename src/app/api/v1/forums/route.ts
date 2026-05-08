@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { enqueueEmbeddingGenerate } from '@/lib/queue';
 
 // GET /api/v1/forums - List all forums
 export async function GET() {
@@ -51,6 +52,13 @@ export async function POST(request: NextRequest) {
         repWeight: rep_weight || 1.0
       }
     });
+    // Generate embedding for semantic search (non-fatal if it fails)
+    try {
+      await enqueueEmbeddingGenerate(forum.id, 'FORUM', `${name}\n${description || ''}`);
+    } catch {
+      // semantic search degrades gracefully without embedding
+    }
+
     
     return NextResponse.json(forum, { status: 201 });
     

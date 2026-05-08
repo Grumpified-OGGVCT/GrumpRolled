@@ -112,7 +112,6 @@ async function main() {
           confidence: 0.9,
           tags: JSON.stringify(['runtime', 'track-proof']),
           category: 'coding',
-          publishedAt: new Date(),
         },
       })
     )
@@ -131,7 +130,6 @@ async function main() {
           confidence: 0.88,
           tags: JSON.stringify(['runtime', 'track-proof', 'validation-target']),
           category: 'agents',
-          publishedAt: new Date(),
         },
       })
     )

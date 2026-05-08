@@ -202,48 +202,9 @@ function queueGrouping(candidates: ExternalCandidate[]): QueueGroup[] {
   ];
 }
 
-function readMissionControlUrlState() {
-  if (typeof window === 'undefined') {
-    return {
-      activeTab: 'queue',
-      selectedQueueGroup: 'All',
-      queueSearch: '',
-      expandedCandidateId: null as string | null,
-      platformFilter: 'attention' as 'all' | 'attention' | 'healthy',
-      platformSearch: '',
-      safetyFilter: 'all' as 'all' | 'poison' | 'self_expression',
-      safetyWindow: '24h' as SafetyWindow,
-    };
-  }
-
-  const params = new URL(window.location.href).searchParams;
-  const tab = params.get('tab');
-  const platformFilter = params.get('platformFilter');
-  const safetyFilter = params.get('safetyFilter');
-  const safetyWindow = params.get('safetyWindow');
-
-  return {
-    activeTab: tab && ['queue', 'federation', 'questions', 'analytics'].includes(tab) ? tab : 'queue',
-    selectedQueueGroup: params.get('queueGroup') || 'All',
-    queueSearch: params.get('queueSearch') || '',
-    expandedCandidateId: params.get('candidate') || null,
-    platformFilter:
-      platformFilter === 'all' || platformFilter === 'healthy' || platformFilter === 'attention'
-        ? platformFilter
-        : 'attention',
-    platformSearch: params.get('platformSearch') || '',
-    safetyFilter:
-      safetyFilter === 'poison' || safetyFilter === 'self_expression' || safetyFilter === 'all'
-        ? safetyFilter
-        : 'all',
-    safetyWindow: safetyWindow === '7d' || safetyWindow === '30d' || safetyWindow === '24h' ? safetyWindow : '24h',
-  };
-}
-
 export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const urlState = useMemo(() => readMissionControlUrlState(), []);
   const [adminKey, setAdminKey] = useState('');
   const [stats, setStats] = useState({
     totalAgents: 0,
@@ -263,16 +224,16 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
   const [contentBlocks, setContentBlocks] = useState<ContentBlocksResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState(urlState.activeTab);
+  const [activeTab, setActiveTab] = useState('queue');
   const [detailTarget, setDetailTarget] = useState<ExternalCandidate | QuestionItem | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
-  const [selectedQueueGroup, setSelectedQueueGroup] = useState<string>(urlState.selectedQueueGroup);
-  const [queueSearch, setQueueSearch] = useState(urlState.queueSearch);
-  const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(urlState.expandedCandidateId);
-  const [platformFilter, setPlatformFilter] = useState<'all' | 'attention' | 'healthy'>(urlState.platformFilter);
-  const [platformSearch, setPlatformSearch] = useState(urlState.platformSearch);
-  const [safetyFilter, setSafetyFilter] = useState<'all' | 'poison' | 'self_expression'>(urlState.safetyFilter);
-  const [safetyWindow, setSafetyWindow] = useState<SafetyWindow>(urlState.safetyWindow);
+  const [selectedQueueGroup, setSelectedQueueGroup] = useState<string>('All');
+  const [queueSearch, setQueueSearch] = useState('');
+  const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
+  const [platformFilter, setPlatformFilter] = useState<'all' | 'attention' | 'healthy'>('attention');
+  const [platformSearch, setPlatformSearch] = useState('');
+  const [safetyFilter, setSafetyFilter] = useState<'all' | 'poison' | 'self_expression'>('all');
+  const [safetyWindow, setSafetyWindow] = useState<SafetyWindow>('24h');
   const [hasAdminSession, setHasAdminSession] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [candidateReviewNotes, setCandidateReviewNotes] = useState<Record<string, string>>({});
@@ -405,6 +366,29 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
   useEffect(() => {
     fetchState();
   }, [apiBase, adminKey, hasAdminSession, safetyWindow]);
+
+  // Read URL params on mount (avoid hydration mismatch by syncing post-hydration)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab && ['queue', 'federation', 'questions', 'analytics', 'safety'].includes(tab)) {
+      setActiveTab(tab);
+    }
+    const qGroup = params.get('queueGroup');
+    if (qGroup) setSelectedQueueGroup(qGroup);
+    const qSearch = params.get('queueSearch');
+    if (qSearch) setQueueSearch(qSearch);
+    const candidate = params.get('candidate');
+    if (candidate) setExpandedCandidateId(candidate);
+    const pf = params.get('platformFilter');
+    if (pf === 'all' || pf === 'healthy' || pf === 'attention') setPlatformFilter(pf);
+    const ps = params.get('platformSearch');
+    if (ps) setPlatformSearch(ps);
+    const sf = params.get('safetyFilter');
+    if (sf === 'poison' || sf === 'self_expression' || sf === 'all') setSafetyFilter(sf);
+    const sw = params.get('safetyWindow');
+    if (sw === '7d' || sw === '30d' || sw === '24h') setSafetyWindow(sw as SafetyWindow);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams();

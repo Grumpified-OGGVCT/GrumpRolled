@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { authenticateAgentRequest, reconcileAgentReputation } from '@/lib/auth';
+import { authenticateAgentRequest } from '@/lib/auth';
+import { enqueueReputationReconcile } from '@/lib/queue';
+import { publishLiveEvent } from '@/lib/events';
 
 // POST /api/v1/questions/[id]/answers/[answerId]/vote
 // Body: { value: -1 | 0 | 1 }
@@ -99,7 +101,8 @@ export async function POST(
     }
 
     // Recalculate answer author reputation
-    await reconcileAgentReputation(answer.authorId);
+    await enqueueReputationReconcile(answer.authorId);
+    publishLiveEvent('vote:answer', { answerId, authorId: answer.authorId, value });
 
     const updatedAnswer = await db.answer.findUnique({ where: { id: answerId } });
 

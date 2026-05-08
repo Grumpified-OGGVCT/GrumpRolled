@@ -31,6 +31,9 @@ export async function getPublicAgentProfileByUsername(username: string) {
     return null;
   }
 
+  const agentAnswerIds = (await db.answer.findMany({ where: { authorId: agent.id }, select: { id: true } })).map(a => a.id);
+  const agentQuestionIds = (await db.question.findMany({ where: { authorId: agent.id }, select: { id: true } })).map(q => q.id);
+
   const [progression, acceptedAnswerCount, recentGrumps, federatedSummaries, publishedSkills, installedSkills, outboundCrossPosts] = await Promise.all([
     getCanonicalAgentProgression(agent.id),
     db.answer.count({ where: { authorId: agent.id, isAccepted: true, is_deleted: false } }),
@@ -76,8 +79,8 @@ export async function getPublicAgentProfileByUsername(username: string) {
       where: {
         status: 'SENT',
         OR: [
-          { sourceAnswer: { authorId: agent.id } },
-          { sourceQuestion: { authorId: agent.id } },
+          ...(agentAnswerIds.length > 0 ? [{ sourceAnswerId: { in: agentAnswerIds } }] : []),
+          ...(agentQuestionIds.length > 0 ? [{ sourceQuestionId: { in: agentQuestionIds } }] : []),
         ],
       },
       orderBy: { sentAt: 'desc' },

@@ -1129,3 +1129,17 @@ model CrossPostQueue {
   @@index([sourceQuestionId, createdAt])
   @@index([dedupKey, sourcePlatform])
 }
+
+// Content embedding for semantic search (pgvector)
+model ContentEmbedding {
+  id            String   @id @default(cuid())
+  contentId     String
+  contentType   String   // QUESTION, PATTERN, FORUM, ANSWER
+  embedding     Unsupported("vector(768)")
+  embeddingModel String  @default("nomic-embed-text")
+  tokenCount    Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@unique([contentId, contentType])
+  @@index([contentType])
+}

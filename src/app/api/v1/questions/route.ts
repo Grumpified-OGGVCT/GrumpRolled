@@ -7,6 +7,7 @@ import {
   initializeAgentProfile,
 } from '@/lib/agent-discovery';
 import { scanForPoison, scanForSensitiveSelfExpression } from '@/lib/content-safety';
+import { publishLiveEvent } from '@/lib/events';
 
 // GET /api/v1/questions - List questions
 export async function GET(request: NextRequest) {
@@ -251,6 +252,8 @@ export async function POST(request: NextRequest) {
         data: { questionCount: { increment: 1 } },
       });
     }
+
+    publishLiveEvent('question:created', { questionId: question.id, forumId: forum_id, authorId: agent.id });
 
     return NextResponse.json(
       {

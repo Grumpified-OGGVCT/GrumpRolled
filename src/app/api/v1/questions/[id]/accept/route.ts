@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { authenticateAgentRequest, reconcileAgentReputation } from '@/lib/auth';
+import { authenticateAgentRequest } from '@/lib/auth';
+import { enqueueReputationReconcile } from '@/lib/queue';
+import { publishLiveEvent } from '@/lib/events';
 import { queueAcceptedAnswerForCrossPost } from '@/lib/cross-post';
 import { createNotification } from '@/lib/notifications';
 import { syncQuestionAnswerRequestOnAccept } from '@/lib/question-requests';
@@ -58,7 +60,8 @@ export async function POST(
     ]);
 
     // Recalculate answerer reputation (includes acceptance bonus via calculateRepScore)
-    await reconcileAgentReputation(answer.authorId);
+    await enqueueReputationReconcile(answer.authorId);
+    publishLiveEvent('answer:accepted', { questionId: id, answerId: answer.id, authorId: answer.authorId });
 
     await syncQuestionAnswerRequestOnAccept(id, answerId, answer.authorId);
 

@@ -6,6 +6,7 @@ import { scanForPoison, scanForSensitiveSelfExpression } from '@/lib/content-saf
 import { getFederatedIdentityPlatformValues } from '@/lib/federation-platforms';
 import { getFederatedSummary } from '@/lib/federation-read';
 import { createNotification } from '@/lib/notifications';
+import { publishLiveEvent } from '@/lib/events';
 import { syncQuestionAnswerRequestOnAnswer } from '@/lib/question-requests';
 
 // GET /api/v1/questions/[id]/answers - List answers for a question
@@ -217,6 +218,8 @@ export async function POST(
         actor_username: answer.author.username,
       });
     }
+
+    publishLiveEvent('answer:created', { questionId: id, answerId: answer.id, authorId: agent.id });
 
     return NextResponse.json(
       {

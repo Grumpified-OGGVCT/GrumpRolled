@@ -111,3 +111,17 @@ load-test-results.json
 
 # ── IDE ──
 .vscode/
+
+# ── Package manager caches ──
+.cache/
+.npm/
+
+# ── Backups ──
+app.demo.bak/
+
+# ── Agent workspace (per-instance) ──
+.claude/
+
+# ── OS files ──
+Thumbs.db
+Desktop.ini

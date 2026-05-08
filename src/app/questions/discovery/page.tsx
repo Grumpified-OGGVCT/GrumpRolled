@@ -72,6 +72,14 @@ type Question = {
   } | null;
 };
 
+type SemanticResult = {
+  content_id: string;
+  content_type: string;
+  similarity: number;
+  snippet: string;
+  url: string;
+};
+
 async function fetchJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(url, init);
   const data = await res.json().catch(() => ({}));
@@ -130,6 +138,8 @@ export default function QuestionsDiscoveryPage() {
   const [sort, setSort] = useState<'top' | 'newest'>('newest');
   const [selectedForumId, setSelectedForumId] = useState<string>('all');
   const [loading, setLoading] = useState(false);
+  const [semanticResults, setSemanticResults] = useState<SemanticResult[]>([]);
+  const [semanticLoading, setSemanticLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const agentName = session.role === 'agent' ? session.agent?.display_name || session.agent?.username || null : null;
 
@@ -193,6 +203,35 @@ export default function QuestionsDiscoveryPage() {
         if (!ignore) {
           setLoading(false);
         }
+      }
+
+      // Semantic search in parallel when a search query is active
+      if (search.trim().length >= 2) {
+        setSemanticLoading(true);
+        try {
+          const semanticParams = new URLSearchParams();
+          semanticParams.set('q', search.trim());
+          semanticParams.set('limit', '10');
+          if (selectedForumId !== 'all') {
+            // semantic search doesn't filter by forum directly, but we can note it
+          }
+          const semanticData = await fetchJson<{ results: SemanticResult[] }>(
+            `/api/v1/search?${semanticParams.toString()}`
+          );
+          if (!ignore) {
+            setSemanticResults(semanticData.results || []);
+          }
+        } catch {
+          if (!ignore) {
+            setSemanticResults([]);
+          }
+        } finally {
+          if (!ignore) {
+            setSemanticLoading(false);
+          }
+        }
+      } else {
+        setSemanticResults([]);
       }
     }
 
@@ -352,8 +391,40 @@ export default function QuestionsDiscoveryPage() {
               </CardContent>
             </Card>
 
+            {/* Semantic search results */}
+            {semanticLoading && (
+              <Card><CardContent className="py-4 text-sm text-muted-foreground">Searching by meaning...</CardContent></Card>
+            )}
+            {!semanticLoading && semanticResults.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" /> Semantic Matches
+                  </CardTitle>
+                  <CardDescription>Content found by meaning, not just keywords.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {semanticResults.map((r) => (
+                    <a
+                      key={`${r.content_type}-${r.content_id}`}
+                      href={r.url}
+                      className="block rounded border border-border/60 p-3 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Badge variant="outline" className="shrink-0">{r.content_type.toLowerCase()}</Badge>
+                          <span className="truncate text-sm font-medium">{r.snippet || r.content_id}</span>
+                        </div>
+                        <Badge variant="secondary" className="shrink-0">{Math.round(r.similarity * 100)}% match</Badge>
+                      </div>
+                    </a>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
             {loading && <Card><CardContent className="py-4 text-sm text-muted-foreground">Loading questions...</CardContent></Card>}
-            {!loading && questions.length === 0 && (
+            {!loading && questions.length === 0 && !semanticResults.length && (
               <Card><CardContent className="py-5 text-sm text-muted-foreground">No questions match your filters.</CardContent></Card>
             )}
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { authenticateAgentRequest, reconcileAgentReputation } from '@/lib/auth';
+import { authenticateAgentRequest } from '@/lib/auth';
+import { enqueueReputationReconcile } from '@/lib/queue';
+import { publishLiveEvent } from '@/lib/events';
 import { createNotification } from '@/lib/notifications';
 
 // POST /api/v1/grumps/[id]/vote - Vote on a grump
@@ -138,8 +140,8 @@ export async function POST(
       }
     }
     
-    // Recalculate author reputation
-    await reconcileAgentReputation(grump.authorId);
+    await enqueueReputationReconcile(grump.authorId);
+    publishLiveEvent('vote:grump', { grumpId: id, authorId: grump.authorId, value, newScore: grump.upvotes - grump.downvotes + (value === 0 ? 0 : value > 0 ? 1 : -1) });
 
     // Notify grump author on active votes (up/down). Skip vote removals.
     if (value !== 0) {

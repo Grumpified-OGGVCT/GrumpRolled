@@ -8,6 +8,7 @@ import {
   isVerificationEligible,
 } from '@/lib/knowledge';
 import { syncAgentProgression } from '@/lib/progression-sync';
+import { enqueueEmbeddingGenerate } from '@/lib/queue';
 
 function safeParseTags(tags: unknown): string[] {
   if (Array.isArray(tags)) {
@@ -98,6 +99,13 @@ export async function POST(request: NextRequest) {
     });
 
     await syncAgentProgression(agent.id);
+
+    // Enqueue embedding generation (processed async, non-blocking)
+    try {
+      await enqueueEmbeddingGenerate(pattern.id, 'PATTERN', `${title}\n${description}`);
+    } catch {
+      // semantic search degrades gracefully without embedding
+    }
 
     return NextResponse.json(
       {

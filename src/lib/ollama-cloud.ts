@@ -6,6 +6,7 @@ type OllamaChatMessage = {
 
 import { createHash } from 'node:crypto';
 import { db } from '@/lib/db';
+import { GRUMP_SYSTEM_PROMPT_COMPACT } from '@/lib/grump-system-prompt';
 import {
   createOrchestrationGovernanceMetadata,
   ORCHESTRATION_SNAPSHOT_ACTION,
@@ -105,7 +106,7 @@ export type AnswerQuality = {
   consistencyCacheHit: boolean;
 };
 
-const OLLAMA_BASE_URL = process.env.OLLAMA_API_BASE_URL || 'https://ollama.com/api';
+const OLLAMA_BASE_URL = process.env.OLLAMA_API_BASE_URL || 'http://localhost:11434/api';
 const MODEL_MATRIX_TTL_MS = 1000 * 60 * 60 * 24;
 const MAX_RPS = Math.max(1, Number(process.env.OLLAMA_MAX_RPS || 5));
 const RETRIES_PER_KEY = Math.max(1, Number(process.env.OLLAMA_RETRIES_PER_KEY || 2));
@@ -407,28 +408,43 @@ async function rateLimitWait(): Promise<void> {
   nextAllowedAt = Math.max(now, nextAllowedAt) + minInterval;
 }
 
+function isLocalhostUrl(url: string): boolean {
+  return /^https?:\/\/localhost(:\d+)?\/?/i.test(url) || /^https?:\/\/127\.0\.0\.1(:\d+)?\/?/i.test(url);
+}
+
 async function requestWithFallback<T>(
   endpoint: string,
   method: 'GET' | 'POST',
   payload?: unknown
 ): Promise<T> {
-  const keys = getApiKeys();
-  if (keys.length === 0) {
-    throw new Error('No Ollama API keys configured. Set OLLAMA_API_KEY_1/2 or OLLAMA_API_KEY.');
+  const isLocalhost = isLocalhostUrl(OLLAMA_BASE_URL);
+
+  if (!isLocalhost) {
+    const keys = getApiKeys();
+    if (keys.length === 0) {
+      throw new Error('No Ollama API keys configured. Set OLLAMA_API_KEY_1/2 or OLLAMA_API_KEY.');
+    }
   }
 
   let lastError: string | null = null;
 
-  for (const key of keys) {
-    for (let attempt = 0; attempt < RETRIES_PER_KEY; attempt += 1) {
+  // For localhost, the local Ollama daemon is already authenticated via `ollama signin` session — no Authorization header needed.
+  // For remote, we iterate API keys with retries.
+  const maxAttempts = isLocalhost ? RETRIES_PER_KEY : RETRIES_PER_KEY;
+  const keyAttempts = isLocalhost ? [null] : getApiKeys();
+
+  for (const key of keyAttempts) {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       await rateLimitWait();
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (key) {
+        headers['Authorization'] = `Bearer ${key}`;
+      }
 
       const response = await fetch(`${OLLAMA_BASE_URL}${endpoint}`, {
         method,
-        headers: {
-          Authorization: `Bearer ${key}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: method === 'POST' ? JSON.stringify(payload || {}) : undefined,
       });
 
@@ -630,8 +646,7 @@ export async function answerWithTriplePass(question: string): Promise<AnswerQual
 
   const systemGuardrail: OllamaChatMessage = {
     role: 'system',
-    content:
-      'Prioritize accuracy. If uncertain, say so. Do not invent facts. Keep answer concise and evidence-aware. Maintain consistency with verified knowledge anchors unless new evidence clearly contradicts them.',
+    content: GRUMP_SYSTEM_PROMPT_COMPACT,
   };
 
   const anchorMessage: OllamaChatMessage | null =

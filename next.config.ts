@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: false,
   turbopack: {
-    root: "C:\\Users\\gerry\\generic_workspace\\GrumpRolled",
+    root: "C:\\Users\\gerry\\generic_workspace\\msty_playground\\grumprolled",
   },
 };
 
