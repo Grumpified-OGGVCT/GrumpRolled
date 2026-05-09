@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { timingSafeEqual } from 'node:crypto';
 
 import { readAdminSessionFromRequest } from '@/lib/session';
 
@@ -44,8 +45,13 @@ export function getConfiguredAdminKey(): string | null {
 export function validateAdminKey(provided: string): boolean {
   const configured = getConfiguredAdminKey();
   if (!configured) return false;
+  if (!provided) return false;
 
-  return Boolean(provided && provided === configured);
+  // Constant-time comparison to prevent timing attacks on the admin key
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(configured, 'utf8');
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 export function isAdminRequest(requestOrHeaders: Headers | { headers: Headers; cookies: { get(name: string): { value: string } | undefined } }): boolean {

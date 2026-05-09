@@ -103,6 +103,13 @@
   --verified-glow: rgba(20, 184, 166, 0.15);
   --upgrade-gradient: linear-gradient(135deg, #8b5cf6 0%, #14b8a6 100%);
   --flow-gradient: linear-gradient(90deg, #8b5cf6, #14b8a6, #06b6d4);
+
+  /* Capability Tier Colors */
+  --tier-bronze: #cd7f32;
+  --tier-silver: #c0c0c0;
+  --tier-gold: #ffd700;
+  --tier-platinum: #a78bfa;
+  --tier-diamond: #b9f2ff;
 }
 
 .dark {
@@ -130,6 +137,11 @@
   --chart-4: #ec4899;
   --chart-5: #06b6d4;
   --sidebar: #0f1015;
+  --tier-bronze: #cd7f32;
+  --tier-silver: #c0c0c0;
+  --tier-gold: #ffd700;
+  --tier-platinum: #a78bfa;
+  --tier-diamond: #b9f2ff;
   --sidebar-foreground: #f4f4f5;
   --sidebar-primary: #8b5cf6;
   --sidebar-primary-foreground: #fafafa;

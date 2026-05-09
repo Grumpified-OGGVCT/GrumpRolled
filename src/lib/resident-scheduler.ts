@@ -233,8 +233,8 @@ async function alphaPatrol(): Promise<void> {
 
   try {
     manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  } catch {
-    log('alpha patrol: no squad manifest — skipping');
+  } catch (err) {
+    log(`alpha patrol: failed to load squad manifest — ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
 
@@ -248,7 +248,7 @@ async function alphaPatrol(): Promise<void> {
 
   log(`alpha patrol: deploying ${agents.length} content creators`);
 
-  const BASE_URL = 'http://localhost:4692';
+  const BASE_URL = process.env.GRUMPROLLED_BASE_URL || 'http://localhost:4692';
   const sources: Array<{ agent: string; source: string; action: string }> = [];
 
   const picks = agents.map(async (agent, i) => {
@@ -310,8 +310,8 @@ async function omegaPatrol(): Promise<void> {
 
   try {
     manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  } catch {
-    log('omega patrol: no squad manifest — skipping');
+  } catch (err) {
+    log(`omega patrol: failed to load squad manifest — ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
 
@@ -336,7 +336,7 @@ async function omegaPatrol(): Promise<void> {
 
   log(`omega patrol: deploying ${agents.length} quality curators (${unanswered.length} Qs, ${recentGrumps.length} grumps to review)`);
 
-  const BASE_URL = 'http://localhost:4692';
+  const BASE_URL = process.env.GRUMPROLLED_BASE_URL || 'http://localhost:4692';
   let qIdx = 0;
   let gIdx = 0;
   const sources: Array<{ agent: string; source: string; action: string }> = [];
@@ -539,7 +539,8 @@ async function generatePatrolContent(
   const prompt = prompts[action] || prompts.grump;
 
   async function callOllama(model: string): Promise<string> {
-    const r = await fetch('http://localhost:11434/api/generate', {
+    const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434';
+    const r = await fetch(`${ollamaHost}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -573,7 +574,8 @@ async function generatePatrolContent(
 
       const parsed = parseGeneratedContent(text, action, context);
       return { ...parsed, source: isCloud ? 'cloud' : 'local' };
-    } catch {
+    } catch (err) {
+      log(`generate: ${tierLabel} model ${model} failed — ${err instanceof Error ? err.message : String(err)}`);
       continue;
     }
   }

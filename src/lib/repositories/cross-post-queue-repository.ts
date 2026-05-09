@@ -53,7 +53,7 @@ export const crossPostQueueRepository = {
       where: {
         status: 'PENDING',
         readyAt: { lte: new Date() },
-        createdAt: { gte: cutoff },
+        createdAt: { lte: cutoff },
       },
       orderBy: [{ confidence: 'desc' }, { readyAt: 'asc' }],
       take: maxCount,

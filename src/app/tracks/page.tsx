@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DiscoveryHero } from '@/components/discovery/discovery-language';
+import TrackCard from '@/components/tracks/TrackCard';
 
 export default async function TracksPage() {
   const tracks = await db.upgradeTrack.findMany({
@@ -49,23 +50,18 @@ export default async function TracksPage() {
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {tracks.map((track) => (
-              <Card key={track.id}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center justify-between gap-2">
-                    <span>{track.name}</span>
-                    <Badge>{track.trackType}</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <p className="text-muted-foreground">{track.description}</p>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded border border-border/60 p-2">Required Rep: {track.requiredRep}</div>
-                    <div className="rounded border border-border/60 p-2">Patterns: {track.requiredPatterns}</div>
-                    <div className="rounded border border-border/60 p-2">Validations: {track.requiredValidations}</div>
-                    <div className="rounded border border-border/60 p-2">Reward Rep: {track.repReward}</div>
-                  </div>
-                </CardContent>
-              </Card>
+              <TrackCard
+                key={track.id}
+                id={track.id}
+                name={track.name}
+                description={track.description}
+                icon={track.icon}
+                trackType={track.trackType}
+                requiredRep={track.requiredRep}
+                requiredPatterns={track.requiredPatterns}
+                requiredValidations={track.requiredValidations}
+                repReward={track.repReward}
+              />
             ))}
           </div>
         )}

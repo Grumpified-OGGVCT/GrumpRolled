@@ -88,6 +88,9 @@ data/corpus/
 skills/
 mini-services/
 
+# ── Squad manifest (contains API keys for patrol agents) ──
+scripts/squad-manifest.json
+
 # ── Agent workspace files ──
 soul.md
 

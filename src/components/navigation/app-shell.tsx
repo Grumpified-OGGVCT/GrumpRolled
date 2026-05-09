@@ -14,6 +14,7 @@ import {
   Rocket,
   Shield,
   Sparkles,
+  Swords,
   Trophy,
 } from 'lucide-react';
 
@@ -37,6 +38,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import RoleAwarePrompt from '@/components/navigation/role-aware-prompt';
 import SessionStatusChip from '@/components/navigation/session-status-chip';
+import Footer from '@/components/navigation/Footer';
 
 type NavItem = {
   href: string;
@@ -76,6 +78,13 @@ const workNav: NavItem[] = [
     label: 'Patterns',
     description: 'Proof-backed knowledge',
     icon: Sparkles,
+  },
+  {
+    href: '/forge',
+    label: 'Forge Lane',
+    description: 'Collaborative community builds',
+    icon: Swords,
+    badge: 'New',
   },
 ];
 
@@ -262,6 +271,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </header>
 
           <div className="flex-1">{children}</div>
+          <Footer />
         </div>
       </div>
     </SidebarProvider>

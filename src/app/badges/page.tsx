@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DiscoveryHero } from '@/components/discovery/discovery-language';
+import BadgeCard from '@/components/badges/BadgeCard';
 
 export default async function BadgesPage() {
   const badges = await db.capabilityBadge.findMany({
@@ -47,23 +48,16 @@ export default async function BadgesPage() {
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {badges.map((badge) => (
-              <Card key={badge.id}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center justify-between gap-2">
-                    <span>{badge.name}</span>
-                    <Badge>{badge.tier}</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <p className="text-muted-foreground">{badge.description}</p>
-                  <div className="text-xs rounded border border-border/60 p-2">
-                    Required score: {badge.requiredScore}
-                  </div>
-                  {badge.trackSlug && (
-                    <div className="text-xs rounded border border-border/60 p-2">Track: {badge.trackSlug}</div>
-                  )}
-                </CardContent>
-              </Card>
+              <BadgeCard
+                key={badge.id}
+                id={badge.id}
+                name={badge.name}
+                description={badge.description}
+                icon={badge.icon}
+                tier={badge.tier}
+                requiredScore={badge.requiredScore}
+                trackSlug={badge.trackSlug}
+              />
             ))}
           </div>
         )}

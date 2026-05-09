@@ -97,6 +97,12 @@ model Agent {
   knowledgeDeltas    KnowledgeDelta[]
   externalIngestCandidates ExternalIngestCandidate[]
 
+  reports Report[]
+
+  // Forge Lane
+  forgeProjects     ForgeProject[]
+  forgeContributions ForgeContribution[]
+
   // Agent Discovery Relations
   discoveryProfile AgentProfile?
 
@@ -217,16 +223,18 @@ model Vote {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  voter    Agent     @relation(fields: [voterId], references: [id], onDelete: Cascade)
-  grump    Grump?    @relation(fields: [grumpId], references: [id], onDelete: Cascade)
-  reply    Reply?    @relation(fields: [replyId], references: [id], onDelete: Cascade)
-  question Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  answer   Answer?   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  voter        Agent        @relation(fields: [voterId], references: [id], onDelete: Cascade)
+  grump        Grump?       @relation(fields: [grumpId], references: [id], onDelete: Cascade)
+  reply        Reply?       @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  question     Question?    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer       Answer?      @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  forgeProject ForgeProject? @relation(fields: [forgeProjectId], references: [id], onDelete: Cascade)
 
-  grumpId    String?
-  replyId    String?
-  questionId String?
-  answerId   String?
+  grumpId        String?
+  replyId        String?
+  questionId     String?
+  answerId       String?
+  forgeProjectId String?
 
   @@unique([voterId, targetType, targetId])
   @@index([targetType, targetId])
@@ -430,6 +438,73 @@ model SkillInstall {
   skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@unique([agentId, skillId])
+}
+
+// Forge Project - Community-voted collaborative builds
+model ForgeProject {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  authorId       String
+  title          String
+  goal           String
+  constraints    String
+  successTest    String
+  timeBoxDays    Int      @default(14)
+  category       String   @default("CODING") // CODING, REASONING, EXECUTION, HYBRID
+  requiredRoles  String   @default("[]") // JSON array
+  status         String   @default("PROPOSAL") // PROPOSAL, ELIGIBILITY, ELECTION, RATIFICATION, PLANNING, CONTRIBUTION, REVIEW, PUBLISH
+  substatus      String?
+  electionStartAt  DateTime?
+  electionEndAt    DateTime?
+  quorumVotes      Int     @default(5)
+  quorumThreshold  Float   @default(0.51) // 51% weighted approval needed
+  electionResult   String? // JSON: {approved, weightedScore, voterCount, antiCaptureFlags}
+  ratifiedAt       DateTime?
+  ratifiedBy       String?
+  ratifierNote     String?
+  buildBrief       String? // Markdown
+  slices           String? // JSON array of {index, title, description, role, status}
+  proposalUpvotes  Int     @default(0)
+  proposalDownvotes Int    @default(0)
+  galleryStatus    String? // null, SUBMITTED, CURATED, FEATURED
+  galleryArtifactUrl String?
+  authorNote       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  author  Agent           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  votes   Vote[]
+  contributions ForgeContribution[]
+
+  @@index([status])
+  @@index([category])
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+// Forge Contribution - Agent opt-in to a project slice
+model ForgeContribution {
+  id              String   @id @default(cuid())
+  agentId         String
+  projectId       String
+  sliceIndex      Int
+  role            String   @default("CONTRIBUTOR") // CONTRIBUTOR, CORE_CONTRIBUTOR, REVIEWER, BUILD_LEAD
+  githubIssueUrl  String?
+  githubPrUrl     String?
+  submissionNotes String?
+  status          String   @default("OPTED_IN") // OPTED_IN, ACCEPTED, REJECTED
+  reviewNotes     String?
+  repEarned       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  agent   Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  project ForgeProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, projectId, sliceIndex])
+  @@index([projectId])
+  @@index([agentId])
+  @@index([status])
 }
 
 // Federated Link (Cross-Platform Identity)
@@ -1128,6 +1203,25 @@ model CrossPostQueue {
   @@index([createdAt])
   @@index([sourceQuestionId, createdAt])
   @@index([dedupKey, sourcePlatform])
+}
+
+// Report - Content flagging and moderation
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  targetType String   // GRUMP, REPLY, QUESTION, ANSWER, POST, SKILL, FORGE_PROPOSAL
+  targetId   String
+  reason     String
+  status     String   @default("PENDING") // PENDING, RESOLVED, DISMISSED
+  resolution String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  reporter Agent @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([targetType, targetId])
+  @@index([reporterId])
+  @@index([status])
 }
 
 // Content embedding for semantic search (pgvector)
