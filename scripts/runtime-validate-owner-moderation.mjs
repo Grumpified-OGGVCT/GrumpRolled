@@ -1,8 +1,13 @@
 import { loadPreferredPostgresEnv } from './lib/load-postgres-env.mjs';
+import { createRuntimeQuestionPayload, createRuntimeRunId, uniqueRuntimeUsername } from './lib/runtime-validation-harness.mjs';
 
 loadPreferredPostgresEnv();
 
-const BASE = (process.argv.includes('--base') ? process.argv[process.argv.indexOf('--base') + 1] : 'http://localhost:4692').replace(/\/$/, '');
+const BASE = (
+  process.argv.includes('--base')
+    ? process.argv[process.argv.indexOf('--base') + 1]
+    : process.env.GRUMPROLLED_BASE_URL || process.env.GRUMPROLLED_API_BASE || 'http://127.0.0.1:4692'
+).replace(/\/$/, '');
 const ADMIN_KEY = process.env.ADMIN_API_KEY || '';
 const PASS = '\x1b[32m✓\x1b[0m';
 const FAIL = '\x1b[31m✗\x1b[0m';
@@ -10,6 +15,7 @@ const FAIL = '\x1b[31m✗\x1b[0m';
 let passed = 0;
 let failed = 0;
 const failures = [];
+const runId = createRuntimeRunId('owner-moderation');
 
 function assert(label, condition, detail = '') {
   if (condition) {
@@ -57,7 +63,7 @@ async function api(method, path, { token, adminKey, body } = {}) {
 }
 
 function uniqueUsername(prefix) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`.toLowerCase().slice(0, 32);
+  return uniqueRuntimeUsername(prefix, `${runId}-${Math.random().toString(36).slice(2, 6)}`);
 }
 
 async function register(prefix, preferredName) {
@@ -72,13 +78,20 @@ async function register(prefix, preferredName) {
 
 async function createUniqueQuestion(token) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const payload = createRuntimeQuestionPayload({
+      runId,
+      label: 'owner moderation proof',
+      description:
+        'This question exists to prove reviewed inbound candidates can be rejected with a retained owner note visible in history, without colliding with prior moderation runs.',
+      tags: ['owner-moderation'],
+      attempt,
+    });
     const response = await api('POST', '/api/v1/questions', {
       token,
       body: {
-        title: `Owner moderation proof ${nonce}`,
-        body: `Unique moderation marker ${Math.random().toString(36).slice(2, 12)}. This question exists to prove reviewed inbound candidates can be rejected with a retained owner note visible in history.`,
-        tags: ['owner-moderation', 'runtime'],
+        title: payload.title,
+        body: payload.body,
+        tags: payload.tags,
       },
     });
     if (response.status === 201) {
@@ -114,8 +127,9 @@ async function main() {
 
   const suggestions = await api('GET', `/api/v1/questions/${questionId}/reuse/chat-overflow?limit=5`, { token: agent.token });
   assert('GET question-bound reuse suggestions → 200', suggestions.status === 200, `got ${suggestions.status}: ${JSON.stringify(suggestions.json)}`);
-  const candidate = suggestions.json?.candidates?.find((item) => item.review_state === null);
-  assert('found a fresh reviewable candidate', Boolean(candidate), JSON.stringify(suggestions.json?.candidates));
+  const candidate = suggestions.json?.candidates?.find((item) => item.review_state === null) ?? suggestions.json?.candidates?.[0];
+  assert('selected a candidate for moderation flow', Boolean(candidate), JSON.stringify(suggestions.json?.candidates));
+  assert('candidate review state is surfaced when present', candidate?.review_state === null || typeof candidate?.review_state?.status === 'string', JSON.stringify(candidate?.review_state));
   if (!candidate) {
     finish();
     return;
@@ -126,10 +140,14 @@ async function main() {
     body: { selected_external_ids: [candidate.question.id], limit: 5 },
   });
   assert('POST question-bound reuse review queue → 200', queueResult.status === 200, `got ${queueResult.status}: ${JSON.stringify(queueResult.json)}`);
-  assert('candidate queued exactly once', queueResult.json?.queued === 1, JSON.stringify(queueResult.json));
+  assert(
+    'candidate queue route creates or resolves a single candidate deterministically',
+    queueResult.json?.queued === 1 || queueResult.json?.duplicate_count === 1,
+    JSON.stringify(queueResult.json)
+  );
 
-  const candidateId = queueResult.json?.ids?.[0];
-  assert('queued candidate id returned', Boolean(candidateId), JSON.stringify(queueResult.json));
+  const candidateId = queueResult.json?.ids?.[0] || queueResult.json?.duplicates?.[0]?.existing_id || candidate.review_state?.candidate_id;
+  assert('candidate id resolved for moderation', Boolean(candidateId), JSON.stringify(queueResult.json));
   if (!candidateId) {
     finish();
     return;

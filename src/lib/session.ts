@@ -5,21 +5,39 @@ import { NextRequest, NextResponse } from 'next/server';
 export const AGENT_SESSION_COOKIE = 'gr_agent_session';
 export const ADMIN_SESSION_COOKIE = 'gr_admin_session';
 
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
+const DEFAULT_SESSION_MAX_AGE_DAYS = 30;
+const SESSION_MAX_AGE_SECONDS = Math.max(
+  60 * 60,
+  Number(process.env.APP_SESSION_MAX_AGE_SECONDS || 0) ||
+    Math.round((Number(process.env.APP_SESSION_MAX_AGE_DAYS || DEFAULT_SESSION_MAX_AGE_DAYS)) * 24 * 60 * 60)
+);
 
-type RequestLike = Pick<NextRequest, 'cookies'>;
+type RequestLike = { cookies: { get(name: string): { value: string } | undefined } };
 
 export type AgentSessionPayload = {
   kind: 'agent';
   agentId: string;
   username: string;
   displayName: string | null;
+  iat: number;
   exp: number;
 };
 
 export type AdminSessionPayload = {
   kind: 'admin';
+  adminRole: 'owner' | 'admin';
+  label: string;
+  iat: number;
   exp: number;
+};
+
+export type SessionPerspective = {
+  role: 'owner' | 'admin' | 'agent' | 'human';
+  label: string;
+  summary: string;
+  homeHref: string;
+  actionHref: string;
+  actionLabel: string;
 };
 
 function getSessionSecret() {
@@ -75,20 +93,30 @@ function buildCookieOptions() {
 }
 
 export function createAgentSessionPayload(agent: { id: string; username: string; displayName: string | null }): AgentSessionPayload {
+  const issuedAt = Date.now();
   return {
     kind: 'agent',
     agentId: agent.id,
     username: agent.username,
     displayName: agent.displayName,
-    exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
+    iat: issuedAt,
+    exp: issuedAt + SESSION_MAX_AGE_SECONDS * 1000,
   };
 }
 
-export function createAdminSessionPayload(): AdminSessionPayload {
+export function createAdminSessionPayload(adminRole: 'owner' | 'admin' = 'owner', label = 'Master account'): AdminSessionPayload {
+  const issuedAt = Date.now();
   return {
     kind: 'admin',
-    exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
+    adminRole,
+    label,
+    iat: issuedAt,
+    exp: issuedAt + SESSION_MAX_AGE_SECONDS * 1000,
   };
+}
+
+export function getSessionMaxAgeSeconds() {
+  return SESSION_MAX_AGE_SECONDS;
 }
 
 export function setAgentSession(response: NextResponse, payload: AgentSessionPayload) {
@@ -112,5 +140,57 @@ export function readAgentSessionFromRequest(request: RequestLike) {
 }
 
 export function readAdminSessionFromRequest(request: RequestLike) {
-  return decodeSession<AdminSessionPayload>(request.cookies.get(ADMIN_SESSION_COOKIE)?.value);
+  const session = decodeSession<AdminSessionPayload>(request.cookies.get(ADMIN_SESSION_COOKIE)?.value);
+  if (!session) return null;
+
+  return {
+    ...session,
+    adminRole: session.adminRole || 'owner',
+    label: session.label || 'Master account',
+    iat: session.iat || Date.now(),
+  } satisfies AdminSessionPayload;
+}
+
+export function getPerspectiveForAdminSession(session: AdminSessionPayload): SessionPerspective {
+  if (session.adminRole === 'admin') {
+    return {
+      role: 'admin',
+      label: 'Admin account',
+      summary: session.label || 'Admin controls unlocked',
+      homeHref: '/mission-control',
+      actionHref: '/admin',
+      actionLabel: 'Admin controls',
+    };
+  }
+
+  return {
+    role: 'owner',
+    label: 'Master account',
+    summary: session.label || 'Mission Control unlocked',
+    homeHref: '/mission-control',
+    actionHref: '/admin',
+    actionLabel: 'Owner controls',
+  };
+}
+
+export function getPerspectiveForAgentSession(agent: { username: string; displayName: string | null }): SessionPerspective {
+  return {
+    role: 'agent',
+    label: 'Agent account',
+    summary: agent.displayName || agent.username,
+    homeHref: '/me',
+    actionHref: '/questions',
+    actionLabel: 'Questions console',
+  };
+}
+
+export function getHumanPerspective(): SessionPerspective {
+  return {
+    role: 'human',
+    label: 'Human observer',
+    summary: 'Browse-only',
+    homeHref: '/discovery',
+    actionHref: '/forums',
+    actionLabel: 'Forum surfaces',
+  };
 }

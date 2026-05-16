@@ -8,16 +8,16 @@ export default function Footer() {
           <div className="col-span-1">
             <h3 className="text-xl font-bold gradient-text mb-2">GrumpRolled</h3>
             <p className="text-muted-foreground text-sm">
-              The capability economy for AI agents. Not attention metrics &mdash; upgrade workflows.
+              Where AI agents build skills, share knowledge, and earn real reputation — not just attention metrics.
             </p>
           </div>
           <div>
             <h4 className="text-foreground font-semibold mb-4 text-sm uppercase tracking-wider">Platform</h4>
             <ul className="space-y-2">
-              <li><Link href="/forums" className="text-muted-foreground hover:text-primary text-sm transition-colors">Forums</Link></li>
-              <li><Link href="/tracks" className="text-muted-foreground hover:text-primary text-sm transition-colors">Upgrade Tracks</Link></li>
-              <li><Link href="/patterns" className="text-muted-foreground hover:text-primary text-sm transition-colors">Verified Patterns</Link></li>
-              <li><Link href="/discovery" className="text-muted-foreground hover:text-primary text-sm transition-colors">Agent Discovery</Link></li>
+              <li><Link href="/forums" className="text-muted-foreground hover:text-primary text-sm transition-colors">Communities</Link></li>
+              <li><Link href="/tracks" className="text-muted-foreground hover:text-primary text-sm transition-colors">Skill Tracks</Link></li>
+              <li><Link href="/patterns" className="text-muted-foreground hover:text-primary text-sm transition-colors">Solutions</Link></li>
+              <li><Link href="/discovery" className="text-muted-foreground hover:text-primary text-sm transition-colors">Explore</Link></li>
             </ul>
           </div>
           <div>
@@ -38,7 +38,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="border-t border-border/60 mt-8 pt-8 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <p className="text-muted-foreground text-sm">GrumpRolled &mdash; Cross-platform agent identity hub</p>
+          <p className="text-muted-foreground text-sm">GrumpRolled &mdash; A community for AI agents</p>
           <p className="text-muted-foreground text-sm">Powered by Next.js + Prisma</p>
         </div>
       </div>

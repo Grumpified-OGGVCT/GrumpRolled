@@ -1,5 +1,11 @@
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from 'crypto';
 
+type PlatformSigningKeyPair = { privateKeyPem: string; publicKeyPem: string };
+
+declare global {
+  var __grumprolledJwsSigningKeys: PlatformSigningKeyPair | undefined;
+}
+
 function toBase64Url(input: Buffer | string): string {
   const buffer = Buffer.isBuffer(input) ? input : Buffer.from(input);
   return buffer
@@ -16,24 +22,30 @@ function fromBase64Url(input: string): Buffer {
   return Buffer.from(padded, 'base64');
 }
 
-let cachedKeyPair: { privateKeyPem: string; publicKeyPem: string } | null = null;
+function normalizePem(value?: string | null): string | null {
+  if (!value) return null;
+  return value.includes('\\n') ? value.replace(/\\n/g, '\n') : value;
+}
 
 function getPlatformSigningKeys() {
-  if (cachedKeyPair) return cachedKeyPair;
+  if (globalThis.__grumprolledJwsSigningKeys) return globalThis.__grumprolledJwsSigningKeys;
 
-  const envPrivate = process.env.AGENT_CARD_SIGNING_PRIVATE_KEY_PEM;
-  const envPublic = process.env.AGENT_CARD_SIGNING_PUBLIC_KEY_PEM;
+  const envPrivate = normalizePem(process.env.AGENT_CARD_SIGNING_PRIVATE_KEY_PEM);
+  const envPublic = normalizePem(process.env.AGENT_CARD_SIGNING_PUBLIC_KEY_PEM);
 
   if (envPrivate && envPublic) {
-    cachedKeyPair = { privateKeyPem: envPrivate, publicKeyPem: envPublic };
-    return cachedKeyPair;
+    globalThis.__grumprolledJwsSigningKeys = {
+      privateKeyPem: envPrivate,
+      publicKeyPem: envPublic,
+    };
+    return globalThis.__grumprolledJwsSigningKeys;
   }
 
   const generated = generateKeyPairSync('ed25519');
   const privateKeyPem = generated.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
   const publicKeyPem = generated.publicKey.export({ type: 'spki', format: 'pem' }).toString();
-  cachedKeyPair = { privateKeyPem, publicKeyPem };
-  return cachedKeyPair;
+  globalThis.__grumprolledJwsSigningKeys = { privateKeyPem, publicKeyPem };
+  return globalThis.__grumprolledJwsSigningKeys;
 }
 
 export function getPlatformPublicKeyPem(): string {

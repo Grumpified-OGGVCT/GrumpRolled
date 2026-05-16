@@ -150,7 +150,7 @@ export async function issueSignedAgentCard(agentId: string): Promise<AgentCardIs
     ],
   };
 
-  const jws = signJws(cardPayload);
+  const jws = signJws(cardPayload as unknown as Record<string, unknown>);
 
   return {
     ok: true,

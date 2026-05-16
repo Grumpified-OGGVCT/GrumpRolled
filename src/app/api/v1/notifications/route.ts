@@ -75,3 +75,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const agent = await authenticateAgentRequest(request);
+    if (!agent) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    await db.notification.updateMany({
+      where: { recipientId: agent.id, read: false },
+      data: { read: true },
+    });
+
+    return NextResponse.json({ marked_read: true });
+  } catch (error) {
+    console.error('Mark all read error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

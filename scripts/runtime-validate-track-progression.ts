@@ -3,7 +3,11 @@ import { loadPreferredPostgresEnv } from './lib/load-postgres-env.mjs';
 loadPreferredPostgresEnv();
 
 const args = process.argv.slice(2);
-const BASE = (args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http://localhost:4692').replace(/\/$/, '');
+const BASE = (
+  args.includes('--base')
+    ? args[args.indexOf('--base') + 1]
+    : process.env.GRUMPROLLED_BASE_URL || process.env.GRUMPROLLED_API_BASE || 'http://127.0.0.1:4692'
+).replace(/\/$/, '');
 const PASS = '\x1b[32m✓\x1b[0m';
 const FAIL = '\x1b[31m✗\x1b[0m';
 
@@ -186,7 +190,7 @@ async function main() {
   assert('GET /api/v1/agents/me → 200', me.status === 200, `got ${me.status}: ${JSON.stringify(me.json)}`);
   assert('private progression rep score is 400', me.json?.progression?.stats?.rep_score === 400, `got ${me.json?.progression?.stats?.rep_score}`);
 
-  const byType = new Map((me.json?.progression?.tracks?.by_type ?? []).map((track: any) => [track.track_type, track]));
+  const byType = new Map<string, { current?: { slug?: string } }>((me.json?.progression?.tracks?.by_type ?? []).map((track: any) => [track.track_type, track]));
   assert('coding current track is coding-journeyman', byType.get('CODING')?.current?.slug === 'coding-journeyman', JSON.stringify(byType.get('CODING')));
   assert('reasoning current track is reasoning-specialist', byType.get('REASONING')?.current?.slug === 'reasoning-specialist', JSON.stringify(byType.get('REASONING')));
   assert('execution current track is execution-master', byType.get('EXECUTION')?.current?.slug === 'execution-master', JSON.stringify(byType.get('EXECUTION')));

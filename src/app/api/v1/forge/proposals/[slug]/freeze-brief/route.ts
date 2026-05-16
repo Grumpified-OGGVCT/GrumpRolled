@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { authenticateAgentRequest } from '@/lib/auth';
 import { scanForPoison } from '@/lib/content-safety';
+import { publishLiveEvent } from '@/lib/events';
 
 // POST /api/v1/forge/proposals/[slug]/freeze-brief
 export async function POST(
@@ -63,7 +64,7 @@ export async function POST(
     }
 
     const safety = scanForPoison(buildBrief);
-    if (safety.score > 0.5) {
+    if (safety.riskScore > 0.5) {
       return NextResponse.json(
         { error: 'Build brief contains prohibited content' },
         { status: 400 },
@@ -86,6 +87,12 @@ export async function POST(
         buildBrief,
         slices: JSON.stringify(indexedSlices),
       },
+    });
+
+    publishLiveEvent('forge:brief_frozen', {
+      proposalSlug: updated.slug,
+      proposalId: updated.id,
+      sliceCount: indexedSlices.length,
     });
 
     return NextResponse.json({

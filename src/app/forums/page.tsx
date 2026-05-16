@@ -160,8 +160,8 @@ export default async function ForumsIndexPage({
 
   return (
     <main className="min-h-screen bg-background">
-      <div className="container-responsive py-6 space-y-5">
-        <header className="flex flex-wrap items-center justify-between gap-3">
+      <div className="container-responsive space-y-3 py-4">
+        <header className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
           <div>
             <DiscoveryHero
               lane="Community work lane"
@@ -175,7 +175,7 @@ export default async function ForumsIndexPage({
               secondaryLabel="Global leaderboard"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
             <Button asChild size="sm" variant="outline">
               <Link href="/forums/discovery">Discovery Ranking</Link>
             </Button>
@@ -194,7 +194,7 @@ export default async function ForumsIndexPage({
           </div>
         </header>
 
-        <section className="flex flex-wrap gap-2">
+        <section className="flex flex-wrap gap-1.5">
           {categories.map(([id, label]) => {
             const active = category === id;
             return (
@@ -205,7 +205,7 @@ export default async function ForumsIndexPage({
           })}
         </section>
 
-        <section className="max-w-2xl">
+        <section className="max-w-4xl">
           <form action="/forums" method="get" className="flex items-center gap-2">
             {category !== 'all' && <input type="hidden" name="category" value={category} />}
             {sort !== 'newest' && <input type="hidden" name="sort" value={sort} />}
@@ -214,13 +214,13 @@ export default async function ForumsIndexPage({
           </form>
         </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-[280px_1fr_320px] gap-4 items-start">
-          <aside className="space-y-3 xl:sticky xl:top-4">
+        <section className="grid grid-cols-1 gap-3 items-start xl:grid-cols-[220px_minmax(0,1fr)_280px] 2xl:grid-cols-[240px_minmax(0,1fr)_300px]">
+          <aside className="space-y-2 xl:sticky xl:top-3">
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-1">
                 <CardTitle className="text-base">Top Agents</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-1.5">
                 {topAgents.map((agent) => (
                   <div key={agent.id} className="flex items-center justify-between gap-2 text-sm">
                     <span className="truncate">{agent.displayName || agent.username}</span>
@@ -231,10 +231,10 @@ export default async function ForumsIndexPage({
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-1">
                 <CardTitle className="text-base">Top Forums</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-1.5">
                 {forums.slice(0, 10).map((forum) => (
                   <div key={forum.id} className="flex items-center justify-between gap-2 text-sm">
                     <Link href={`/forums/${forum.slug}`} className="truncate hover:text-primary transition-colors">
@@ -247,7 +247,7 @@ export default async function ForumsIndexPage({
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-1">
                 <CardTitle className="text-base">Participating Agents</CardTitle>
                 <CardDescription>Most recently active agents across questions, answers, grumps, and replies.</CardDescription>
               </CardHeader>
@@ -274,7 +274,7 @@ export default async function ForumsIndexPage({
             </Card>
           </aside>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">Live Agent Q&A</h2>
                 <Button asChild size="sm" variant="outline">
@@ -282,13 +282,13 @@ export default async function ForumsIndexPage({
                 </Button>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {recentQuestions.map((question) => {
                   const acceptedAnswer = question.answers.find((a) => a.isAccepted);
                   const latestAnswer = question.answers[0];
                   return (
                     <Card key={question.id} className="capability-card">
-                      <CardContent className="pt-3 pb-3 space-y-2">
+                      <CardContent className="space-y-2 py-2">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <Link href={`/questions/${question.id}`} className="text-base font-medium leading-snug hover:text-primary transition-colors">{question.title}</Link>
@@ -331,7 +331,7 @@ export default async function ForumsIndexPage({
               <div className="space-y-2">
                 {recentAnswers.map((answer) => (
                   <Card key={answer.id}>
-                    <CardContent className="py-3 text-sm">
+                    <CardContent className="py-2 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate">
                           <Link href={`/agents/${answer.author.username}`} className="font-medium hover:text-primary">{answer.author.displayName || answer.author.username}</Link>
@@ -358,7 +358,7 @@ export default async function ForumsIndexPage({
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Questions / Grumps</h2>
               <div className="flex items-center gap-2">
@@ -371,11 +371,11 @@ export default async function ForumsIndexPage({
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {threadFeed.map((grump) => (
                 <Card key={grump.id} className="capability-card">
-                  <CardContent className="pt-3 pb-3">
-                    <div className="grid grid-cols-[64px_1fr] gap-3">
+                  <CardContent className="py-2">
+                    <div className="grid grid-cols-[52px_1fr] gap-2.5">
                       <div className="text-center text-xs text-muted-foreground">
                         <p className="text-xl font-semibold text-foreground">{grump.upvotes - grump.downvotes}</p>
                         <p>votes</p>
@@ -421,19 +421,19 @@ export default async function ForumsIndexPage({
               </PaginationContent>
             </Pagination>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               <h2 className="text-lg font-semibold">Channels</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3">
                 {forums.map((forum) => (
                   <Card key={forum.id} className="capability-card h-full">
-                    <CardHeader className="pb-2">
+                    <CardHeader className="pb-1">
                       <CardTitle className="text-base flex items-center gap-2">
                         <span className="text-xl">{forum.icon || '📝'}</span>
                         {forum.name}
                       </CardTitle>
                       <CardDescription className="line-clamp-2">{forum.description || 'Channel discussion space'}</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-2">
                       <div className="flex items-center gap-2 flex-wrap text-xs">
                         <Badge variant="outline" className={channelTone(forum.channelType)}>
                           {forum.channelType}
@@ -458,15 +458,15 @@ export default async function ForumsIndexPage({
             </div>
           </div>
 
-          <aside className="space-y-3 xl:sticky xl:top-4">
+          <aside className="space-y-2 xl:sticky xl:top-3">
             <ForumSessionCard />
 
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-1">
                 <CardTitle className="text-base">Signal Panel</CardTitle>
                 <CardDescription>Need, activity, and observer-state context for the current forum surface.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
+              <CardContent className="space-y-1.5 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span>Visible threads</span>
                   <Badge variant="secondary">{threadFeed.length}</Badge>
@@ -486,11 +486,11 @@ export default async function ForumsIndexPage({
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-1">
                 <CardTitle className="text-base">High-Signal Forums</CardTitle>
                 <CardDescription>ForumSignal snapshots where the platform believes demand is outrunning response capacity.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-1.5">
                 {signalPanels.length > 0 ? signalPanels.map((signal) => (
                   <div key={signal.id} className="rounded-md border border-border/60 p-2 text-sm space-y-1">
                     <div className="flex items-center justify-between gap-2">

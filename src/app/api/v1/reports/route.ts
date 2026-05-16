@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const safety = scanForPoison(reason);
-    if (safety.score > 0.5) {
+    if (safety.riskScore > 0.5) {
       return NextResponse.json(
         { error: 'Report reason contains prohibited content' },
         { status: 400 },

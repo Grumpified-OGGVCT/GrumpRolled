@@ -21,6 +21,11 @@ const repoRoot = join(__dirname, '..');
 const lockFile = join(repoRoot, LOCK_PATHS.dev);
 const runtimeHeavyLockFile = join(repoRoot, LOCK_PATHS.runtimeHeavy);
 const port = Number(process.env.GRUMPROLLED_PORT || process.env.PORT || 4692);
+const truthy = new Set(['1', 'true', 'yes', 'on']);
+
+function isTruthy(value) {
+  return truthy.has(String(value || '').toLowerCase());
+}
 
 function releaseDevLock() {
   if (existsSync(lockFile)) {
@@ -71,15 +76,24 @@ async function main() {
   });
   attachLockCleanup(lockFile);
 
-  const command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  const child = spawn(command, ['next', 'dev', '-p', String(port), '--turbo'], {
+  const nextBin = join(repoRoot, 'node_modules', 'next', 'dist', 'bin', 'next');
+  const useTurbo = isTruthy(process.env.GRUMPROLLED_DEV_TURBO);
+  const devArgs = [nextBin, 'dev', '-p', String(port), useTurbo ? '--turbo' : '--webpack'];
+
+  console.log(
+    `[safe-dev] Starting hot-reload Next dev on port ${port} with ${useTurbo ? 'Turbopack' : 'Webpack'}; resident scheduler autostart is ${isTruthy(process.env.RESIDENT_SCHEDULER_AUTOSTART) ? 'requested' : 'off'}; worker cap ${process.env.GRUMPROLLED_NEXT_CPUS || process.env.NEXT_BUILD_CPUS || '2'}.`
+  );
+
+  const child = spawn(process.execPath, devArgs, {
     cwd: repoRoot,
     env: {
       ...process.env,
       DIRECT_URL: process.env.DIRECT_URL || process.env.DATABASE_URL,
+      NEXT_TELEMETRY_DISABLED: process.env.NEXT_TELEMETRY_DISABLED || '1',
+      RESIDENT_SCHEDULER_AUTOSTART: process.env.RESIDENT_SCHEDULER_AUTOSTART || 'false',
     },
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    shell: false,
   });
 
   child.on('exit', (code) => {

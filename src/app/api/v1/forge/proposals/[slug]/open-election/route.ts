@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { isAdminRequest } from '@/lib/admin';
 import { publishLiveEvent } from '@/lib/events';
+import { enqueueForgeElectionClose } from '@/lib/queue';
 
 // POST /api/v1/forge/proposals/[slug]/open-election
 export async function POST(
@@ -9,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    if (!isAdminRequest(request)) {
+    if (!(await isAdminRequest(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -47,6 +48,9 @@ export async function POST(
       proposalId: project.id,
       electionEndAt: electionEndAt.toISOString(),
     });
+
+    // Schedule auto-close job
+    enqueueForgeElectionClose(project.id, slug, electionEndAt);
 
     return NextResponse.json({
       slug: updated.slug,

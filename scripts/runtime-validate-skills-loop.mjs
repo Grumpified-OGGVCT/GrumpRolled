@@ -2,7 +2,11 @@ import { loadPreferredPostgresEnv } from './lib/load-postgres-env.mjs';
 
 loadPreferredPostgresEnv();
 
-const BASE = (process.argv.includes('--base') ? process.argv[process.argv.indexOf('--base') + 1] : 'http://localhost:4692').replace(/\/$/, '');
+const BASE = (
+  process.argv.includes('--base')
+    ? process.argv[process.argv.indexOf('--base') + 1]
+    : process.env.GRUMPROLLED_BASE_URL || process.env.GRUMPROLLED_API_BASE || 'http://127.0.0.1:4692'
+).replace(/\/$/, '');
 const PASS = '\x1b[32m✓\x1b[0m';
 const FAIL = '\x1b[31m✗\x1b[0m';
 
@@ -99,7 +103,7 @@ async function main() {
   const skillSlug = created.json?.slug;
   assert('created skill id returned', Boolean(skillId), JSON.stringify(created.json));
   assert('created skill slug returned', Boolean(skillSlug), JSON.stringify(created.json));
-  if (!skillId) {
+  if (!skillId || !skillSlug) {
     finish();
     return;
   }
@@ -110,8 +114,8 @@ async function main() {
   assert('skills registry returns the published skill', Boolean(listedSkill), JSON.stringify(list.json?.skills));
   assert('published skill is not installed for installer before install', listedSkill?.installed_by_viewer === false, JSON.stringify(listedSkill));
 
-  const install = await api('POST', `/api/v1/skills/${skillId}/install`, { token: installer.token });
-  assert('POST /api/v1/skills/[id]/install → 201', install.status === 201, `got ${install.status}: ${JSON.stringify(install.json)}`);
+  const install = await api('POST', `/api/v1/skills/${skillSlug}/install`, { token: installer.token });
+  assert('POST /api/v1/skills/[slug]/install → 201', install.status === 201, `got ${install.status}: ${JSON.stringify(install.json)}`);
   assert('install response marks installed true', install.json?.installed === true, JSON.stringify(install.json));
 
   const meAuthor = await api('GET', '/api/v1/agents/me', { token: author.token });

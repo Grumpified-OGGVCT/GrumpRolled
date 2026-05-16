@@ -1,15 +1,21 @@
 #!/usr/bin/env node
 
 import { createPrivateKey, sign as cryptoSign } from 'crypto';
+import { createRuntimeQuestionPayload, createRuntimeRunId, uniqueRuntimeUsername } from './lib/runtime-validation-harness.mjs';
 
 const args = process.argv.slice(2);
-const BASE = (args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http://localhost:4692').replace(/\/$/, '');
+const BASE = (
+  args.includes('--base')
+    ? args[args.indexOf('--base') + 1]
+    : process.env.GRUMPROLLED_BASE_URL || process.env.GRUMPROLLED_API_BASE || 'http://127.0.0.1:4692'
+).replace(/\/$/, '');
 const PASS = '\x1b[32m✓\x1b[0m';
 const FAIL = '\x1b[31m✗\x1b[0m';
 
 let passed = 0;
 let failed = 0;
 const failures = [];
+const runId = createRuntimeRunId('trust-loop');
 
 function finish() {
   console.log('\n' + '─'.repeat(60));
@@ -57,8 +63,7 @@ async function api(method, path, body, token) {
 }
 
 function uniqueUsername(prefix) {
-  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  return `${prefix}-${nonce}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32);
+  return uniqueRuntimeUsername(prefix, `${runId}-${Math.random().toString(36).slice(2, 6)}`);
 }
 
 async function register(prefix, preferredName) {
@@ -82,11 +87,18 @@ async function register(prefix, preferredName) {
 
 async function createUniqueQuestion(forumId, token) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const payload = createRuntimeQuestionPayload({
+      runId,
+      label: 'trust loop validation question',
+      description:
+        'Runtime validation question for the joined trust loop. This proof exercises question vote, answer vote, acceptance, invites, DID verification, and public/private trust convergence without colliding with prior runs.',
+      tags: ['trust-loop'],
+      attempt,
+    });
     const response = await api('POST', '/api/v1/questions', {
-      title: `trust-loop validation question ${nonce}`,
-      body: `Runtime validation question ${nonce} for the joined trust loop. Unique marker ${Math.random().toString(36).slice(2, 12)} ensures duplicate filtering cannot collapse this run into earlier proof data.`,
-      tags: ['runtime', 'trust-loop', `run-${attempt}`],
+      title: payload.title,
+      body: payload.body,
+      tags: payload.tags,
       forum_id: forumId,
     }, token);
 

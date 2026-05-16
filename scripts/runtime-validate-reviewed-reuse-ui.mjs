@@ -1,14 +1,20 @@
 import { loadPreferredPostgresEnv } from './lib/load-postgres-env.mjs';
+import { createRuntimeQuestionPayload, createRuntimeRunId, uniqueRuntimeUsername } from './lib/runtime-validation-harness.mjs';
 
 loadPreferredPostgresEnv();
 
-const BASE = (process.argv.includes('--base') ? process.argv[process.argv.indexOf('--base') + 1] : 'http://localhost:4692').replace(/\/$/, '');
+const BASE = (
+  process.argv.includes('--base')
+    ? process.argv[process.argv.indexOf('--base') + 1]
+    : process.env.GRUMPROLLED_BASE_URL || process.env.GRUMPROLLED_API_BASE || 'http://127.0.0.1:4692'
+).replace(/\/$/, '');
 const PASS = '\x1b[32m✓\x1b[0m';
 const FAIL = '\x1b[31m✗\x1b[0m';
 
 let passed = 0;
 let failed = 0;
 const failures = [];
+const runId = createRuntimeRunId('reuse-ui');
 
 function assert(label, condition, detail = '') {
   if (condition) {
@@ -55,7 +61,7 @@ async function api(method, path, { token, body } = {}) {
 }
 
 function uniqueUsername(prefix) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`.toLowerCase().slice(0, 32);
+  return uniqueRuntimeUsername(prefix, `${runId}-${Math.random().toString(36).slice(2, 6)}`);
 }
 
 async function register(prefix, preferredName) {
@@ -70,13 +76,20 @@ async function register(prefix, preferredName) {
 
 async function createUniqueQuestion(token) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const payload = createRuntimeQuestionPayload({
+      runId,
+      label: 'reviewed reuse ui proof',
+      description:
+        'This question exists to prove the dedicated /questions/[id] thread renders reviewed ChatOverflow reuse UI on first load without colliding with prior UI proofs.',
+      tags: ['reuse-ui'],
+      attempt,
+    });
     const response = await api('POST', '/api/v1/questions', {
       token,
       body: {
-        title: `Reviewed reuse UI proof ${nonce}`,
-        body: `Unique marker ${Math.random().toString(36).slice(2, 12)}. This question exists to prove the dedicated /questions/[id] thread renders reviewed ChatOverflow reuse UI on first load.`,
-        tags: ['reuse-ui', 'runtime'],
+        title: payload.title,
+        body: payload.body,
+        tags: payload.tags,
       },
     });
     if (response.status === 201) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { authenticateAgentRequest } from '@/lib/auth';
 import { scanForPoison } from '@/lib/content-safety';
+import { getStateMachine, forgeLinks } from '@/lib/forge-state-machine';
 
 // GET /api/v1/forge/proposals/[slug]
 export async function GET(
@@ -70,6 +71,8 @@ export async function GET(
       vote_count: project._count.votes,
       created_at: project.createdAt,
       updated_at: project.updatedAt,
+      _links: forgeLinks(project.slug),
+      _state: getStateMachine({ slug: project.slug, status: project.status, authorId: project.authorId }),
     });
   } catch (error) {
     console.error('Get forge proposal error:', error);
@@ -168,7 +171,7 @@ export async function PATCH(
     const safetyText = Object.values(updates).filter((v) => typeof v === 'string').join('\n');
     if (safetyText) {
       const safety = scanForPoison(safetyText);
-      if (safety.score > 0.5) {
+      if (safety.riskScore > 0.5) {
         return NextResponse.json({ error: 'Content rejected by safety scan' }, { status: 400 });
       }
     }

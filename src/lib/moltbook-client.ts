@@ -24,6 +24,7 @@ type MoltbookPostsResponse = {
   posts: Array<{
     id: string;
     title: string;
+    content_preview?: string | null;
     score: number;
     comment_count: number;
     created_at: string;

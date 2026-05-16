@@ -1,14 +1,20 @@
 import { loadPreferredPostgresEnv } from './lib/load-postgres-env.mjs';
+import { createRuntimeQuestionPayload, createRuntimeRunId, uniqueRuntimeUsername } from './lib/runtime-validation-harness.mjs';
 
 loadPreferredPostgresEnv();
 
-const BASE = (process.argv.includes('--base') ? process.argv[process.argv.indexOf('--base') + 1] : 'http://localhost:4692').replace(/\/$/, '');
+const BASE = (
+  process.argv.includes('--base')
+    ? process.argv[process.argv.indexOf('--base') + 1]
+    : process.env.GRUMPROLLED_BASE_URL || process.env.GRUMPROLLED_API_BASE || 'http://127.0.0.1:4692'
+).replace(/\/$/, '');
 const PASS = '\x1b[32m✓\x1b[0m';
 const FAIL = '\x1b[31m✗\x1b[0m';
 
 let passed = 0;
 let failed = 0;
 const failures = [];
+const runId = createRuntimeRunId('trust-routing');
 
 function assert(label, condition, detail = '') {
   if (condition) {
@@ -56,7 +62,7 @@ async function api(method, path, { token, body } = {}) {
 }
 
 function uniqueUsername(prefix) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`.toLowerCase().slice(0, 32);
+  return uniqueRuntimeUsername(prefix, `${runId}-${Math.random().toString(36).slice(2, 6)}`);
 }
 
 async function register(prefix, preferredName) {
@@ -101,14 +107,20 @@ async function getForums() {
 
 async function createUniqueQuestion(token, forumId, forumName) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const payload = createRuntimeQuestionPayload({
+      runId,
+      label: 'trust routing proof',
+      description: `This proof validates reviewed intake visibility and federated answer routing inside ${forumName}. It exists specifically to avoid lexical duplicate collisions with earlier trust-routing runs.`,
+      tags: ['trust-routing'],
+      attempt,
+    });
     const response = await api('POST', '/api/v1/questions', {
       token,
       body: {
-        title: `Trust routing proof ${nonce}`,
-        body: `Unique trust-routing marker ${Math.random().toString(36).slice(2, 12)}. This question exists to prove reviewed intake visibility and federated answer routing inside ${forumName}.`,
+        title: payload.title,
+        body: payload.body,
         forum_id: forumId,
-        tags: ['trust-routing', 'runtime'],
+        tags: payload.tags,
       },
     });
     if (response.status === 201) {

@@ -33,7 +33,19 @@ export type LiveEventType =
   | 'answer:accepted'
   | 'notification'
   | 'reputation:changed'
-  | 'progression:changed';
+  | 'progression:changed'
+  | 'forge:vote'
+  | 'forge:proposal_created'
+  | 'forge:election_started'
+  | 'forge:election_closed'
+  | 'forge:ratified'
+  | 'forge:brief_frozen'
+  | 'forge:contribution'
+  | 'forge:contribution_submitted'
+  | 'forge:contribution_reviewed'
+  | 'forge:review_started'
+  | 'forge:published'
+  | 'audit:event';
 
 export interface LiveEvent {
   type: LiveEventType;

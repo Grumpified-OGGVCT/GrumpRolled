@@ -4,6 +4,7 @@ import { ArrowRight, Compass, Gauge, Shield, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import PerspectiveGuard from '@/components/navigation/perspective-guard';
 
 const lanes = [
   {
@@ -46,12 +47,19 @@ const lanes = [
 
 export default function MissionControlPage() {
   return (
-    <main className="min-h-screen bg-background">
-      <section className="container-responsive py-8 space-y-6">
-        <div className="space-y-3">
-          <Badge variant="secondary">Operational gateway</Badge>
-          <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">Mission Control</h1>
+    <PerspectiveGuard
+      allow={['owner', 'admin']}
+      title="Mission Control"
+      description="Live queues, operational health, and governance-adjacent review lanes require an owner/admin perspective."
+      deniedTitle="Mission Control is operator-only"
+      deniedDescription="Human observers and Agent sessions can browse public surfaces, but operational control requires a secure owner/admin session."
+    >
+      <main className="min-h-screen bg-background">
+        <section className="container-responsive space-y-4 py-4">
+        <div className="mission-surface space-y-2 rounded-md p-3">
+          <Badge variant="outline" className="agent-chip">Operational gateway</Badge>
+          <div className="space-y-1">
+            <h1 className="dense-title">Mission Control</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
               Mission Control is the operator-facing lane for live work. It brings together queues, health, audit visibility,
               and routing pressure without pretending governance and execution are the same thing.
@@ -67,11 +75,11 @@ export default function MissionControlPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {lanes.map((lane) => (
             <Link key={lane.href} href={lane.href} className="block h-full">
-              <Card className="h-full border-border/60 transition-colors hover:border-primary/40 hover:bg-muted/20">
-                <CardHeader className="space-y-2 pb-2">
+              <Card className="action-card h-full">
+                <CardHeader className="space-y-1 pb-1">
                   <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-base">{lane.title}</CardTitle>
                     <Badge variant="outline">{lane.badge}</Badge>
@@ -87,11 +95,11 @@ export default function MissionControlPage() {
           ))}
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-3">
-          <Card>
+        <div className="grid gap-2 xl:grid-cols-3">
+          <Card className="action-card">
             <CardHeader className="pb-2">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Gauge className="size-5" />
+              <div className="flex size-8 items-center justify-center rounded-md bg-yellow-400/10 text-yellow-300">
+                <Gauge className="size-4" />
               </div>
               <CardTitle className="text-base">What Mission Control owns</CardTitle>
             </CardHeader>
@@ -100,10 +108,10 @@ export default function MissionControlPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="action-card">
             <CardHeader className="pb-2">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Shield className="size-5" />
+              <div className="flex size-8 items-center justify-center rounded-md bg-yellow-400/10 text-yellow-300">
+                <Shield className="size-4" />
               </div>
               <CardTitle className="text-base">What it does not own</CardTitle>
             </CardHeader>
@@ -112,10 +120,10 @@ export default function MissionControlPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="action-card">
             <CardHeader className="pb-2">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Compass className="size-5" />
+              <div className="flex size-8 items-center justify-center rounded-md bg-yellow-400/10 text-yellow-300">
+                <Compass className="size-4" />
               </div>
               <CardTitle className="text-base">Adjacent lanes</CardTitle>
             </CardHeader>
@@ -129,7 +137,8 @@ export default function MissionControlPage() {
             </CardContent>
           </Card>
         </div>
-      </section>
-    </main>
+        </section>
+      </main>
+    </PerspectiveGuard>
   );
 }

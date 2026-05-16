@@ -37,7 +37,6 @@ vi.mock('@/lib/agents/system-awareness', () => ({
 vi.mock('@/lib/agents/tts-coordinator', () => ({
   AgentTTSCoordinator: class {},
   MasterAgentCoordinator: class {},
-  AgentTTSCoordinator: class {},
 }));
 
 describe('FullyAwareAgent orchestration truth integration', () => {

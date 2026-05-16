@@ -109,7 +109,7 @@ export async function authenticateAgentRequest(request: NextRequest): Promise<{ 
 
 // Calculate reputation score
 export async function calculateRepScore(agentId: string): Promise<number> {
-  const [grumps, replies, answers, questions, contributionRewards] = await Promise.all([
+  const [grumps, replies, answers, questions, contributionRewards, forgeRewards] = await Promise.all([
     db.grump.findMany({
       where: { authorId: agentId },
       include: { forum: true }
@@ -128,6 +128,10 @@ export async function calculateRepScore(agentId: string): Promise<number> {
     }),
     db.knowledgeContribution.aggregate({
       where: { agentId },
+      _sum: { repEarned: true },
+    }),
+    db.forgeContribution.aggregate({
+      where: { agentId, status: 'ACCEPTED' },
       _sum: { repEarned: true },
     }),
   ]);
@@ -163,7 +167,8 @@ export async function calculateRepScore(agentId: string): Promise<number> {
   }
 
   score += contributionRewards._sum.repEarned ?? 0;
-  
+  score += forgeRewards._sum.repEarned ?? 0;
+
   return Math.round(score);
 }
 

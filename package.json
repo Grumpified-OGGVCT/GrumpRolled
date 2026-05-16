@@ -7,9 +7,13 @@
     "dev": "npm run db:pg:generate && node scripts/dev-safe.mjs",
     "dev:pg": "npm run db:pg:generate && node scripts/dev-safe.mjs",
     "dev:next": "node scripts/dev-safe.mjs",
+    "live:check": "npm run db:pg:generate && node scripts/live-check-safe.mjs",
+    "live:check:keep": "npm run db:pg:generate && node scripts/live-check-safe.mjs --keep-alive",
     "build": "npm run db:pg:generate && next build && node scripts/postbuild-copy.mjs",
     "start": "node .next/standalone/server.js",
     "lint": "eslint .",
+    "security:supply-chain:check": "node scripts/supply-chain-guard.mjs",
+    "security:supply-chain:strict": "node scripts/supply-chain-guard.mjs --strict",
     "test": "npm run db:pg:generate && vitest run",
     "load:grumps": "node scripts/load-test-grumps.mjs",
     "defense:check": "powershell -ExecutionPolicy Bypass -File scripts/windows-defense-check.ps1",
@@ -63,7 +67,11 @@
     "runtime:cross-post-queue": "node scripts/runtime-validate-cross-post-queue.mjs",
     "runtime:cross-post-send-configured": "node scripts/runtime-validate-cross-post-send-configured.mjs",
     "runtime:owner-moderation": "node scripts/runtime-validate-owner-moderation.mjs",
-    "analysis:hlf:record": "node scripts/record-hlf-evaluation.mjs"
+    "analysis:hlf:record": "node scripts/record-hlf-evaluation.mjs",
+    "runtime:forge-live": "node scripts/runtime-validate-forge-live.mjs",
+    "forge:validator:image": "docker build -t grumprolled-forge-validator:local -f docker/forge-validator/Dockerfile docker/forge-validator",
+    "runtime:forge-live:docker": "node scripts/runtime-validate-forge-live.mjs --expect-docker",
+    "runtime:forge-live:docker:gate": "node scripts/runtime-validate-forge-live.mjs --expect-docker --expect-validation-gate"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -151,6 +159,7 @@
     "vitest": "^4.1.2"
   },
   "overrides": {
-    "axios": "1.14.0"
+    "axios": "1.14.0",
+    "node-ipc": "9.2.1"
   }
 }

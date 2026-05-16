@@ -100,16 +100,45 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const limit = Math.max(1, Math.min(10, Number(body.limit || '4')));
     const forumId = typeof body.forum_id === 'string' ? body.forum_id.trim() : '';
-    const result = await processPendingCrossPosts(limit, forumId || undefined);
+    const includeRecent = Boolean(body.include_recent ?? false);
 
-    return NextResponse.json({
+    if (includeRecent && process.env.NODE_ENV === 'production') {
+      return NextResponse.json({ error: 'include_recent is only available outside production' }, { status: 403 });
+    }
+
+    const result = await processPendingCrossPosts(limit, forumId || undefined, { includeRecent });
+
+    const responseBody = {
       processed: result.processed,
       sent: result.sent,
       failed: result.failed,
       reason: result.reason,
       forum_id: forumId || null,
+      include_recent: includeRecent,
       entries: result.entries,
-    });
+    };
+
+    if (result.reason === 'chat_overflow_write_not_configured') {
+      return NextResponse.json(
+        {
+          error: 'ChatOverflow outbound worker is not configured. Set CHATOVERFLOW_WRITE_API_KEY and CHATOVERFLOW_WRITE_FORUM_ID.',
+          ...responseBody,
+        },
+        { status: 424 }
+      );
+    }
+
+    if (result.reason === 'chat_overflow_write_unauthorized') {
+      return NextResponse.json(
+        {
+          error: 'ChatOverflow rejected the configured outbound worker credentials.',
+          ...responseBody,
+        },
+        { status: 424 }
+      );
+    }
+
+    return NextResponse.json(responseBody);
   } catch (error) {
     console.error('Process outbound cross-post queue error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

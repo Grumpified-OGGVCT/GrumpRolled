@@ -1,11 +1,16 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ThumbsUp, ThumbsDown, Clock, Users } from 'lucide-react';
+import { ArrowLeft, ThumbsUp, ThumbsDown, Clock, Users, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { db } from '@/lib/db';
+import { ElectionWidget } from '@/components/forge/ElectionWidget';
+import { FreezeBriefForm } from '@/components/forge/FreezeBriefForm';
+import { SliceClaimPanel } from '@/components/forge/SliceClaimPanel';
+import { ProposalActions } from '@/components/forge/ProposalActions';
+import { getStateMachine } from '@/lib/forge-state-machine';
 
 const stages = [
   'PROPOSAL', 'ELIGIBILITY', 'ELECTION', 'RATIFICATION',
@@ -46,13 +51,15 @@ export default async function ForgeProposalDetailPage({
   const electionResult = project.electionResult ? JSON.parse(project.electionResult) : null;
   const slices: Array<{ index: number; title: string; description: string; role: string; status: string }> =
     project.slices ? JSON.parse(project.slices) : [];
+  const stateMachine = getStateMachine({ slug: project.slug, status: project.status, authorId: project.authorId });
+  const blackHoleStages = ['ELIGIBILITY', 'RATIFICATION', 'REVIEW', 'PUBLISH'];
 
   return (
     <div className="container-responsive py-8 space-y-6">
       <Button asChild variant="ghost" size="sm">
         <Link href="/forge">
           <ArrowLeft className="size-4 mr-2" />
-          Back to Forge
+          Back to Projects
         </Link>
       </Button>
 
@@ -154,6 +161,53 @@ export default async function ForgeProposalDetailPage({
         </div>
 
         <div className="space-y-4">
+          {/* Stage info for black-hole stages (no agent actions available) */}
+          {blackHoleStages.includes(project.status) && (
+            <Card className="border-blue-500/20 bg-blue-500/5">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-blue-400">
+                  <Info className="size-4" />
+                  <span className="text-sm font-semibold">{project.status} Stage</span>
+                </div>
+                <p className="text-sm text-muted-foreground">{stateMachine.stage_description}</p>
+                {stateMachine.transition_criteria && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">What happens next:</p>
+                    <p className="text-xs text-muted-foreground">{stateMachine.transition_criteria}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Author actions: edit/delete when in PROPOSAL or REJECTED */}
+          {(project.status === 'PROPOSAL' || project.status === 'REJECTED') && (
+            <ProposalActions slug={project.slug} canEdit />
+          )}
+
+          {/* Election voting */}
+          {project.status === 'ELECTION' && project.electionStartAt && project.electionEndAt && (
+            <ElectionWidget
+              slug={project.slug}
+              electionStartAt={project.electionStartAt.toISOString()}
+              electionEndAt={project.electionEndAt.toISOString()}
+              proposalUpvotes={project.proposalUpvotes}
+              proposalDownvotes={project.proposalDownvotes}
+              authorId={project.authorId}
+              quorumVotes={project.quorumVotes}
+            />
+          )}
+
+          {/* Freeze brief when in PLANNING */}
+          {project.status === 'PLANNING' && (
+            <FreezeBriefForm slug={project.slug} />
+          )}
+
+          {/* Claim slices when in CONTRIBUTION */}
+          {project.status === 'CONTRIBUTION' && slices.length > 0 && (
+            <SliceClaimPanel slug={project.slug} slices={slices} category={project.category} />
+          )}
+
           <Card>
             <CardHeader><CardTitle className="text-sm">Stats</CardTitle></CardHeader>
             <CardContent className="space-y-3">

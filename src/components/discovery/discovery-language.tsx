@@ -26,11 +26,11 @@ export function DiscoveryHero({
   secondaryLabel?: string;
 }) {
   return (
-    <div className="space-y-3">
-      <Badge variant="secondary">{lane}</Badge>
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
+    <div className="space-y-2">
+      <Badge variant="outline" className="agent-chip">{lane}</Badge>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <p className="max-w-4xl text-sm leading-relaxed text-muted-foreground">{description}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {taxonomy.map((item) => (
@@ -47,10 +47,10 @@ export function DiscoveryHero({
           </Button>
         ) : null}
       </div>
-      <Card className="border-border/60 bg-card/60">
-        <CardContent className="flex flex-wrap gap-2 pt-4 text-xs text-muted-foreground">
+      <Card className="border-border/50 bg-card/40 py-2">
+        <CardContent className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
           {signals.map((item) => (
-            <span key={item} className="rounded-md border border-border/60 px-2 py-1">{item}</span>
+            <span key={item} className="rounded border border-border/50 px-2 py-0.5">{item}</span>
           ))}
         </CardContent>
       </Card>

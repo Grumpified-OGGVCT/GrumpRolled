@@ -174,8 +174,13 @@ export async function queueForCrossPost(
  * Get pending cross-posts that are ready to send
  * Batch processor calls this to get the next batch (respecting 2-4/day cadence)
  */
-export async function getPendingCrossPosts(maxCount = 4): Promise<any[]> {
-  const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1000); // Only posts at least 24h old
+export async function getPendingCrossPosts(
+  maxCount = 4,
+  options: { includeRecent?: boolean } = {}
+): Promise<any[]> {
+  const cutoffTime = options.includeRecent
+    ? null
+    : new Date(Date.now() - 24 * 60 * 60 * 1000); // Only posts at least 24h old
 
   return crossPostQueueRepository.findPendingReady(cutoffTime, maxCount);
 }
@@ -197,9 +202,13 @@ export async function markCrossPostFailed(queueId: string, errorMessage: string)
   if (!current) return;
 
   const attemptCount = (current.attemptCount || 0) + 1;
-  const shouldGiveUp = attemptCount > 3; // Give up after 3 failures
+  const shouldGiveUp = isTerminalCrossPostFailure(errorMessage) || attemptCount > 3; // Give up immediately for invalid auth/config, otherwise after 3 failures
 
   await crossPostQueueRepository.updateFailure(queueId, attemptCount, shouldGiveUp, errorMessage);
+}
+
+function isTerminalCrossPostFailure(errorMessage: string) {
+  return /ChatOverflow API (401|403)\b/i.test(errorMessage);
 }
 
 /**
@@ -364,7 +373,11 @@ function readChatOverflowCliConfig(): { apiKey: string; apiUrl: string } {
   }
 }
 
-export async function processPendingCrossPosts(maxCount = 4, forumOverride?: string) {
+export async function processPendingCrossPosts(
+  maxCount = 4,
+  forumOverride?: string,
+  options: { includeRecent?: boolean } = {}
+) {
   const config = getChatOverflowWriteConfig(forumOverride);
 
   if (!config.enabled) {
@@ -377,10 +390,11 @@ export async function processPendingCrossPosts(maxCount = 4, forumOverride?: str
     };
   }
 
-  const pending = await getPendingCrossPosts(maxCount);
+  const pending = await getPendingCrossPosts(maxCount, { includeRecent: options.includeRecent });
   const results: Array<{ id: string; status: 'SENT' | 'FAILED'; chat_overflow_post_id?: string; error?: string }> = [];
   let sent = 0;
   let failed = 0;
+  let sawUnauthorized = false;
 
   for (const entry of pending) {
     try {
@@ -410,6 +424,9 @@ export async function processPendingCrossPosts(maxCount = 4, forumOverride?: str
       results.push({ id: entry.id, status: 'SENT', chat_overflow_post_id: created.id });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown cross-post failure';
+      if (isTerminalCrossPostFailure(message)) {
+        sawUnauthorized = true;
+      }
       await markCrossPostFailed(entry.id, message);
       failed += 1;
       results.push({ id: entry.id, status: 'FAILED', error: message });
@@ -420,7 +437,12 @@ export async function processPendingCrossPosts(maxCount = 4, forumOverride?: str
     processed: pending.length,
     sent,
     failed,
-    reason: pending.length === 0 ? 'no_pending_entries' : 'processed_batch',
+    reason:
+      pending.length === 0
+        ? 'no_pending_entries'
+        : sawUnauthorized && sent === 0
+          ? 'chat_overflow_write_unauthorized'
+          : 'processed_batch',
     entries: results,
   };
 }

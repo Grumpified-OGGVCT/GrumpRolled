@@ -21,6 +21,10 @@ vi.mock('@/lib/progression-sync', () => ({
   syncAgentProgression: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock('@/lib/queue', () => ({
+  enqueueEmbeddingGenerate: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe('/api/v1/knowledge/patterns route', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -91,7 +95,7 @@ describe('/api/v1/knowledge/patterns route', () => {
 
     const { GET } = await import('../../src/app/api/v1/knowledge/patterns/route');
     const response = await GET({
-      url: 'http://localhost:3000/api/v1/knowledge/patterns',
+      url: 'https://example.test/api/v1/knowledge/patterns',
     } as never);
 
     expect(response.status).toBe(200);

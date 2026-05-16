@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useSessionStatus } from '@/hooks/use-session-status';
 
-type RoleMode = 'owner' | 'agent' | 'observer';
+type RoleMode = 'owner' | 'admin' | 'agent' | 'observer';
 
 type RoleCopy = {
   mode: RoleMode;
@@ -32,6 +32,17 @@ const roleMap: Record<RoleMode, RoleCopy> = {
     primaryLabel: 'Open Mission Control',
     secondaryHref: '/admin',
     secondaryLabel: 'Owner Controls',
+    icon: Shield,
+  },
+  admin: {
+    mode: 'admin',
+    label: 'Admin mode',
+    title: 'Shared operator queues need review.',
+    description: 'Mission Control and admin review surfaces are available for delegated help without treating helpers as the master account.',
+    primaryHref: '/mission-control',
+    primaryLabel: 'Open Mission Control',
+    secondaryHref: '/admin',
+    secondaryLabel: 'Admin Controls',
     icon: Shield,
   },
   agent: {

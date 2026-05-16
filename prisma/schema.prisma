@@ -111,6 +111,10 @@ model Agent {
   reputation        Reputation?
   didBountiesAuthor Bounty[]           @relation("BountyAuthor")
   didBountiesClaimed Bounty[]          @relation("BountyClaimed")
+
+  // HLF-Extracted Relations
+  modelCertifications ModelCertification[] @relation("ModelCertifier")
+  ethicsAuditLogs     EthicsAuditLog[]
 }
 
 // Forum/Channel
@@ -492,7 +496,7 @@ model ForgeContribution {
   githubIssueUrl  String?
   githubPrUrl     String?
   submissionNotes String?
-  status          String   @default("OPTED_IN") // OPTED_IN, ACCEPTED, REJECTED
+  status          String   @default("OPTED_IN") // OPTED_IN, SUBMITTED, ACCEPTED, REJECTED
   reviewNotes     String?
   repEarned       Int      @default(0)
   createdAt       DateTime @default(now())
@@ -686,6 +690,7 @@ model VerifiedPattern {
 
   author      Agent               @relation(fields: [authorId], references: [id], onDelete: Cascade)
   validations PatternValidation[]
+  reinforcementEvents ReinforcementEvent[]
 }
 
 // Pattern Validation - Proof that pattern works
@@ -1236,4 +1241,168 @@ model ContentEmbedding {
 
   @@unique([contentId, contentType])
   @@index([contentType])
+}
+
+// =============================================
+// AUDIT EVENT — Immutable forensic event log
+// =============================================
+
+model AuditEvent {
+  id                 String   @id
+  eventType          String   // PATTERN_CREATED, PATTERN_PROMOTED, CONFIDENCE_CHANGED, etc.
+  timestamp          DateTime
+  actorId            String
+  targetId           String
+  previousState      String?  // JSON serialized
+  newState           String?  // JSON serialized
+  causalChain        String   // JSON array of event IDs
+  metadata           String?  // JSON
+  triggeringIntentId String?
+  sessionId          String?
+
+  @@index([actorId])
+  @@index([targetId])
+  @@index([eventType])
+  @@index([triggeringIntentId])
+  @@index([sessionId])
+  @@index([timestamp])
+}
+
+// Reinforcement Event — tracks HKS compounding loop hits
+model ReinforcementEvent {
+  id               String   @id @default(cuid())
+  patternId        String
+  agentId          String
+  timestamp        DateTime @default(now())
+  context          String?
+  confidenceBefore Float
+  confidenceAfter  Float
+  deltaApplied     Float
+
+  pattern VerifiedPattern @relation(fields: [patternId], references: [id], onDelete: Cascade)
+
+  @@index([patternId])
+  @@index([agentId])
+  @@index([timestamp])
+}
+
+// =============================================
+// HLF-EXTRACTED MODELS — Constraint, Ethics, Entropy, Model Certification
+// =============================================
+
+// Model Certification — which AI models are trusted contributors
+model ModelCertification {
+  id                  String   @id @default(cuid())
+  modelName           String
+  provider            String
+  certificationLevel  String   @default("UNVERIFIED") // CERTIFIED, PROMISING, UNVERIFIED, DEPRECATED
+  capabilities        String   @default("[]") // JSON array of capability tags
+  compileSuccessRate  Float?
+  avgLatencyS         Float?
+  certifiedAt         DateTime @default(now())
+  expiresAt           DateTime?
+  deprecationReason   String?
+  certifiedByAgentId  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  certifiedByAgent Agent?           @relation("ModelCertifier", fields: [certifiedByAgentId], references: [id], onDelete: SetNull)
+  provenance       ModelProvenance[]
+
+  @@unique([modelName, provider])
+  @@index([certificationLevel])
+  @@index([provider])
+  @@index([modelName])
+}
+
+// Model Provenance — which model contributed what knowledge
+model ModelProvenance {
+  id               String   @id @default(cuid())
+  certificationId  String
+  patternId        String?
+  articleId        String?
+  contributionRole String   @default("AUTHOR") // AUTHOR, REVIEWER, VALIDATOR
+  confidenceInput  Float?   // Confidence contribution from this model (0-1)
+
+  createdAt DateTime @default(now())
+
+  certification ModelCertification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+
+  @@index([certificationId])
+  @@index([patternId])
+  @@index([articleId])
+}
+
+// Constraint Rule — single declarative safety rule
+model ConstraintRule {
+  id          String   @id @default(cuid())
+  action      String   @default("FORBID") // FORBID, ALLOW, REQUIRE_APPROVAL
+  tool        String   // shell, file_read, file_write, http_request, process_spawn, db_query, db_execute
+  pattern     String   // glob or regex pattern
+  patternType String   @default("glob") // glob, regex
+  argsPattern String?  // Optional: refine match to specific args
+  minTier     String   @default("hearth") // hearth, forge, sovereign
+  description String
+  enabled     Boolean  @default(true)
+  priority    Int      @default(0) // higher = checked first
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([action])
+  @@index([tool])
+  @@index([minTier])
+  @@index([enabled])
+}
+
+// Constraint Rule Set — named collection of rules (e.g., "production-safety", "dev-relaxed")
+model ConstraintRuleSet {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  ruleIds     String   @default("[]") // JSON array of ConstraintRule IDs
+  isDefault   Boolean  @default(false) // If true, auto-applied to new sessions
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Ethics Audit Log — record of each 4-layer pipeline review
+model EthicsAuditLog {
+  id              String   @id @default(cuid())
+  agentId         String?
+  contentSnippet  String   // First 500 chars of reviewed content
+  contentHash     String   // SHA-256 for dedup
+  pipelineResult  String   @default("PASSED") // PASSED, BLOCKED, TERMINATED
+  violations      String   @default("[]") // JSON array of Violation objects
+  articlesCited   String?  // e.g. "C-1,C-3" — which constitutional articles triggered
+  reviewDurationMs Int?
+
+  createdAt DateTime @default(now())
+
+  agent Agent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([agentId])
+  @@index([pipelineResult])
+  @@index([createdAt])
+}
+
+// Entropy Anchor Snapshot — records drift detection results over time
+model EntropyAnchorSnapshot {
+  id               String   @id @default(cuid())
+  patternId        String?
+  intentText       String   // The declared intent / original NLP
+  decompiledText   String   // The decompiled representation back to prose
+  similarityScore  Float    // Cosine similarity (0-1)
+  threshold        Float    // Threshold that was applied
+  policyMode       String   @default("advisory") // advisory, enforce, high_risk_enforce
+  passed           Boolean  // Did it pass the gate?
+
+  createdAt DateTime @default(now())
+
+  @@index([patternId])
+  @@index([passed])
+  @@index([similarityScore])
+  @@index([createdAt])
 }

@@ -12,12 +12,13 @@ export function useLiveEvents(options: UseLiveEventsOptions = {}) {
   const { types = [], enabled = true } = options;
   const [lastEvent, setLastEvent] = useState<LiveEvent | null>(null);
   const [events, setEvents] = useState<LiveEvent[]>([]);
+  const typesKey = types.join(',');
   const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
 
-    const typesParam = types.length > 0 ? `?types=${types.join(',')}` : '';
+    const typesParam = typesKey ? `?types=${typesKey}` : '';
     const es = new EventSource(`/api/v1/events${typesParam}`);
     eventSourceRef.current = es;
 
@@ -39,8 +40,7 @@ export function useLiveEvents(options: UseLiveEventsOptions = {}) {
       es.close();
       eventSourceRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, types.join(',')]);
+  }, [enabled, typesKey]);
 
   return { lastEvent, events };
 }

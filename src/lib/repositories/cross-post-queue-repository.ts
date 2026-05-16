@@ -48,12 +48,12 @@ export const crossPostQueueRepository = {
     return db.crossPostQueue.create({ data: entry });
   },
 
-  findPendingReady(cutoff: Date, maxCount: number) {
+  findPendingReady(cutoff: Date | null, maxCount: number) {
     return db.crossPostQueue.findMany({
       where: {
         status: 'PENDING',
         readyAt: { lte: new Date() },
-        createdAt: { lte: cutoff },
+        ...(cutoff ? { createdAt: { lte: cutoff } } : {}),
       },
       orderBy: [{ confidence: 'desc' }, { readyAt: 'asc' }],
       take: maxCount,

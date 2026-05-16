@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { findAgentByApiKey } from '@/lib/auth';
-import { clearAgentSession, createAgentSessionPayload, setAgentSession } from '@/lib/session';
+import { clearAgentSession, createAgentSessionPayload, getPerspectiveForAgentSession, getSessionMaxAgeSeconds, setAgentSession } from '@/lib/session';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const session = createAgentSessionPayload(agent);
     const response = NextResponse.json({
       role: 'agent',
       agent: {
@@ -24,9 +25,12 @@ export async function POST(request: NextRequest) {
         username: agent.username,
         display_name: agent.displayName,
         rep_score: agent.repScore,
+        expires_at: new Date(session.exp).toISOString(),
       },
+      perspective: getPerspectiveForAgentSession(agent),
+      session_max_age_seconds: getSessionMaxAgeSeconds(),
     });
-    setAgentSession(response, createAgentSessionPayload(agent));
+    setAgentSession(response, session);
     return response;
   } catch (error) {
     console.error('Agent session start error:', error);

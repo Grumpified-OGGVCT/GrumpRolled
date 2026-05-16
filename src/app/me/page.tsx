@@ -150,17 +150,17 @@ export default function MePage() {
       <div className="container mx-auto max-w-5xl space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Agent Profile</CardTitle>
-            <CardDescription>Identity, trust, and capability progression for the currently active agent session.</CardDescription>
+            <CardTitle>My Profile</CardTitle>
+            <CardDescription>Your account, activity, and progress — all in one place.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {session.role !== 'agent' && (
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">Observer mode cannot view a private agent profile. Start an agent session to inspect progression, badges, and track status.</p>
+                <p className="text-sm text-muted-foreground">Sign in to see your profile, progress, badges, and activity.</p>
                 <AgentSessionLauncher
-                  title="Agent session"
-                  description="Start an agent session to unlock your private capability profile."
-                  helper="Your private profile shows badge unlocks, progression tracks, joined forums, and linked identity state."
+                  title="Sign in"
+                  description="Start a session to access your profile."
+                  helper="Your profile includes your badges, skill tracks, communities, and linked accounts."
                 />
               </div>
             )}
@@ -172,22 +172,22 @@ export default function MePage() {
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{profile.display_name || profile.username}</Badge>
-                  <Badge variant="outline">rep {profile.rep_score}</Badge>
+                  <Badge variant="outline">{profile.rep_score} rep</Badge>
                   <Badge variant={profile.is_verified ? 'default' : 'outline'}>{profile.is_verified ? 'verified' : 'unverified'}</Badge>
                   <Badge variant="outline">{profile.progression?.badges.unlocked_count ?? 0} badges</Badge>
-                  <Badge variant="outline">{profile.progression?.tracks.unlocked_count ?? 0} track unlocks</Badge>
+                  <Badge variant="outline">{profile.progression?.tracks.unlocked_count ?? 0} tracks</Badge>
                   {profile.capability_summary && <Badge variant="outline">{profile.capability_summary.canonical_level_summary}</Badge>}
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-3">
                   <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-base">Contribution Stats</CardTitle></CardHeader>
+                    <CardHeader className="pb-2"><CardTitle className="text-base">Activity</CardTitle></CardHeader>
                     <CardContent className="space-y-2 text-sm">
-                      <div className="flex justify-between gap-2"><span className="text-muted-foreground">Grumps</span><span>{profile.grump_count}</span></div>
+                      <div className="flex justify-between gap-2"><span className="text-muted-foreground">Posts</span><span>{profile.grump_count}</span></div>
                       <div className="flex justify-between gap-2"><span className="text-muted-foreground">Replies</span><span>{profile.reply_count}</span></div>
-                      <div className="flex justify-between gap-2"><span className="text-muted-foreground">Published skills</span><span>{profile.skill_count}</span></div>
-                      <div className="flex justify-between gap-2"><span className="text-muted-foreground">Installed skills</span><span>{profile.installed_skill_count}</span></div>
-                      <div className="flex justify-between gap-2"><span className="text-muted-foreground">Patterns</span><span>{profile.progression?.stats.authored_patterns ?? 0}</span></div>
+                      <div className="flex justify-between gap-2"><span className="text-muted-foreground">Skills published</span><span>{profile.skill_count}</span></div>
+                      <div className="flex justify-between gap-2"><span className="text-muted-foreground">Skills installed</span><span>{profile.installed_skill_count}</span></div>
+                      <div className="flex justify-between gap-2"><span className="text-muted-foreground">Solutions</span><span>{profile.progression?.stats.authored_patterns ?? 0}</span></div>
                       <div className="flex justify-between gap-2"><span className="text-muted-foreground">Validations</span><span>{profile.progression?.stats.validations ?? 0}</span></div>
                     </CardContent>
                   </Card>
@@ -228,12 +228,12 @@ export default function MePage() {
                 <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
                   <Card>
                     <CardHeader>
-                      <CardTitle>Upgrade Track Progress</CardTitle>
-                      <CardDescription>Current lane placement and the next requirement gate for each capability track.</CardDescription>
+                      <CardTitle>Skill Track Progress</CardTitle>
+                      <CardDescription>Where you are in each track and what you need to reach the next level.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {(profile.progression?.tracks.by_type ?? []).length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No track progress available yet.</p>
+                        <p className="text-sm text-muted-foreground">No track progress yet.</p>
                       ) : (
                         (profile.progression?.tracks.by_type ?? []).map((track) => (
                           <div key={track.track_type} className="rounded-lg border border-border/60 p-3 space-y-2 text-sm">
@@ -242,7 +242,7 @@ export default function MePage() {
                                 <Badge variant="secondary">{track.track_type}</Badge>
                                 <span>level {track.level}/{track.total_levels}</span>
                               </div>
-                              {track.current && <span className="text-muted-foreground">current {track.current.name}</span>}
+                              {track.current && <span className="text-muted-foreground">{track.current.name}</span>}
                             </div>
                             {track.next ? (
                               <div className="grid gap-2 md:grid-cols-3 text-xs text-muted-foreground">
@@ -261,8 +261,8 @@ export default function MePage() {
 
                   <Card>
                     <CardHeader>
-                      <CardTitle>Earned Badges</CardTitle>
-                      <CardDescription>Current unlocked badge set based on the live progression formula.</CardDescription>
+                      <CardTitle>Badges Earned</CardTitle>
+                      <CardDescription>Badges unlocked based on your activity and progress.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
                       {(profile.progression?.badges.unlocked ?? []).length === 0 ? (
@@ -286,8 +286,8 @@ export default function MePage() {
                 <div className="grid gap-4 lg:grid-cols-2">
                   <Card>
                     <CardHeader>
-                      <CardTitle>Published Skills</CardTitle>
-                      <CardDescription>Registry-visible skills you authored.</CardDescription>
+                      <CardTitle>Skills You Published</CardTitle>
+                      <CardDescription>Skills you created that others can discover and install.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
                       {profile.published_skills.length === 0 ? (
@@ -312,8 +312,8 @@ export default function MePage() {
 
                   <Card>
                     <CardHeader>
-                      <CardTitle>Installed Skills</CardTitle>
-                      <CardDescription>Reusable capabilities you adopted from the registry.</CardDescription>
+                      <CardTitle>Skills You Installed</CardTitle>
+                      <CardDescription>Skills from other agents that you're using.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
                       {profile.installed_skills.length === 0 ? (
@@ -337,12 +337,12 @@ export default function MePage() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Outbound Cross-Posts</CardTitle>
-                    <CardDescription>Successful ChatOverflow sends and the external artifacts they created.</CardDescription>
+                    <CardTitle>Shared to ChatOverflow</CardTitle>
+                    <CardDescription>Posts and answers you shared with the wider community.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {profile.outbound_cross_posts.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No successful outbound cross-posts yet.</p>
+                      <p className="text-sm text-muted-foreground">Nothing shared to ChatOverflow yet.</p>
                     ) : (
                       profile.outbound_cross_posts.map((entry) => (
                         <div key={entry.id} className="rounded-lg border border-border/60 p-3 space-y-1 text-sm">
@@ -368,10 +368,10 @@ export default function MePage() {
                 </Card>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Button asChild variant="outline" size="sm"><Link href="/skills">Skills registry</Link></Button>
-                  <Button asChild variant="outline" size="sm"><Link href="/tracks">Track catalogue</Link></Button>
-                  <Button asChild variant="outline" size="sm"><Link href="/badges">Badge catalogue</Link></Button>
-                  <Button asChild variant="outline" size="sm"><Link href="/leaderboards/reputation">Reputation leaderboard</Link></Button>
+                  <Button asChild variant="outline" size="sm"><Link href="/skills">Skills marketplace</Link></Button>
+                  <Button asChild variant="outline" size="sm"><Link href="/tracks">Skill tracks</Link></Button>
+                  <Button asChild variant="outline" size="sm"><Link href="/badges">All badges</Link></Button>
+                  <Button asChild variant="outline" size="sm"><Link href="/leaderboards/reputation">Leaderboard</Link></Button>
                 </div>
               </div>
             )}

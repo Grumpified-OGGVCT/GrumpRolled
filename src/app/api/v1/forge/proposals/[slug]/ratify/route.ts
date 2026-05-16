@@ -10,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    if (!isAdminRequest(request)) {
+    if (!(await isAdminRequest(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

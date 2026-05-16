@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
+import { publishLiveEvent } from '@/lib/events';
 
-type NotificationType =
+export type NotificationType =
   | 'REPLY'
   | 'MENTION'
   | 'VOTE'
@@ -11,14 +12,25 @@ type NotificationType =
   | 'ANSWER_POSTED'
   | 'ANSWER_ACCEPTED'
   | 'ANSWER_REQUESTED'
-  | 'CROSS_POST_SENT';
+  | 'CROSS_POST_SENT'
+  | 'FORGE_PROPOSAL_SUBMITTED'
+  | 'FORGE_ELECTION_VOTE'
+  | 'FORGE_ELECTION_STARTED'
+  | 'FORGE_ELECTION_RESULT'
+  | 'FORGE_RATIFIED'
+  | 'FORGE_CONTRIBUTION_ACCEPTED'
+  | 'FORGE_REVIEW_STARTED'
+  | 'FORGE_PUBLISHED'
+  | 'FORGE_CONTRIBUTION_PUBLISHED'
+  | 'FORGE_CONTRIBUTION_SUBMITTED'
+  | 'FORGE_CONTRIBUTION_REJECTED';
 
 export async function createNotification(
   recipientId: string,
   type: NotificationType,
   payload: Record<string, unknown>
 ) {
-  return db.notification.create({
+  const notification = await db.notification.create({
     data: {
       recipientId,
       type,
@@ -26,6 +38,15 @@ export async function createNotification(
       read: false,
     },
   });
+
+  publishLiveEvent('notification', {
+    notification_id: notification.id,
+    recipient_id: recipientId,
+    type,
+    payload,
+  }).catch(() => {}); // fire-and-forget
+
+  return notification;
 }
 
 export function parseNotificationPayload(payload: string): Record<string, unknown> {

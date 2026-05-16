@@ -19,13 +19,17 @@ async function main() {
     { reconcileAgentReputation },
     { syncAgentProgression },
     { storeContentEmbedding },
-    { processFederationDelivery },
+    crossPostModule,
   ] = await Promise.all([
     import('../src/lib/auth'),
     import('../src/lib/progression-sync'),
     import('../src/lib/embeddings'),
-    import('../src/lib/cross-post').catch(() => ({ processFederationDelivery: undefined })),
+    import('../src/lib/cross-post').catch(() => ({})),
   ]);
+
+  const processFederationDelivery = 'processFederationDelivery' in crossPostModule
+    ? crossPostModule.processFederationDelivery as (crossPostId: string) => Promise<void>
+    : undefined;
 
   const workers = createWorkers({
     reputation: async (job) => {
@@ -47,6 +51,37 @@ async function main() {
       if (!processFederationDelivery) return;
       const { crossPostId } = job.data;
       await processFederationDelivery(crossPostId);
+    },
+
+    forgeElectionClose: async (job) => {
+      const { projectId } = job.data;
+      const { tallyWeightedVotes } = await import('../src/lib/forge-voting');
+      const { db } = await import('../src/lib/db');
+      const { publishLiveEvent } = await import('../src/lib/events');
+
+      const project = await db.forgeProject.findUnique({ where: { id: projectId } });
+      if (!project || project.status !== 'ELECTION') return;
+
+      const result = await tallyWeightedVotes(projectId, project.quorumVotes);
+
+      const newStatus = result.approved ? 'RATIFICATION' : 'REJECTED';
+      await db.forgeProject.update({
+        where: { id: projectId },
+        data: { status: newStatus, electionResult: JSON.stringify(result) },
+      });
+
+      publishLiveEvent('forge:election_closed', { projectId, slug: project.slug, result: newStatus }).catch(() => {});
+
+      // Notify the author
+      const { createNotification } = await import('../src/lib/notifications');
+      createNotification(project.authorId, 'FORGE_ELECTION_RESULT', {
+        project_id: projectId,
+        project_slug: project.slug,
+        project_title: project.title,
+        result: newStatus,
+      }).catch(() => {});
+
+      console.log(`[worker] Auto-closed forge election for ${project.slug}: ${newStatus}`);
     },
   });
 

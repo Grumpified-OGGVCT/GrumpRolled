@@ -6,6 +6,13 @@ type OllamaChatMessage = {
 
 import { createHash } from 'node:crypto';
 import { db } from '@/lib/db';
+import {
+  assertCloudModel,
+  cloudModelsOnly,
+  getCloudFallbackModels,
+  getPrimaryCloudFallbackModel,
+  isCloudModel,
+} from '@/lib/cloud-model-policy';
 import { GRUMP_SYSTEM_PROMPT_COMPACT } from '@/lib/grump-system-prompt';
 import {
   createOrchestrationGovernanceMetadata,
@@ -31,6 +38,21 @@ type RoutedChatOutcome = {
   content: string;
   route: LLMRoute;
   account: ProviderAccountConfig | null;
+};
+
+export type CloudFallbackRecommendation = {
+  model: string;
+  modifiedAt: string;
+  family: string;
+  parameterSizeRaw: string;
+  reason: string;
+  score: number;
+};
+
+export type CloudFallbackRecommendationReport = {
+  checkedAt: string;
+  activeFallbackModels: string[];
+  recommendations: CloudFallbackRecommendation[];
 };
 
 type OllamaModelSummary = {
@@ -117,8 +139,10 @@ const WEB_SEARCH_POLICY = 'ollama-sidecar';
 const FRESHNESS_CUE_REGEX = /\b(today|current|latest|now|as of|recent|price|weather|stock|breaking|202[4-9])\b/i;
 
 let matrixCache: { fetchedAt: number; entries: ModelMatrixEntry[] } | null = null;
+let cloudRecommendationCache: { fetchedAt: number; report: CloudFallbackRecommendationReport } | null = null;
 let nextAllowedAt = 0;
 const CONSISTENCY_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+const CLOUD_RECOMMENDATION_TTL_MS = 1000 * 60 * 60 * 24;
 const consistencyCache = new Map<string, { answer: string; updatedAt: number }>();
 let lastOrchestrationTelemetrySnapshot: OrchestrationTelemetrySnapshot | null = null;
 const OLLAMA_PROVIDER: ProviderIdentityLike = {
@@ -144,6 +168,54 @@ function parseParameterSize(raw: string | undefined): number {
 
 function compareIsoDate(a: string, b: string): number {
   return new Date(b).getTime() - new Date(a).getTime();
+}
+
+function fallbackMatrixEntry(model: string): ModelMatrixEntry {
+  assertCloudModel(model);
+  return {
+    model,
+    capabilities: [],
+    parameterSizeRaw: 'cloud',
+    parameterSizeNumeric: 0,
+    modifiedAt: new Date(0).toISOString(),
+    family: 'ollama-cloud',
+  };
+}
+
+function scoreCloudFallbackCandidate(entry: ModelMatrixEntry): number {
+  const model = entry.model.toLowerCase();
+  let score = 0;
+
+  if (model.includes('kimi-k2.6')) score += 120;
+  else if (model.includes('kimi-k2.5') || model.includes('kimi-k2-thinking')) score += 95;
+  else if (model.includes('kimi')) score += 80;
+
+  if (model.includes('deepseek-v4-pro')) score += 115;
+  else if (model.includes('deepseek-v4-flash')) score += 90;
+  else if (model.includes('deepseek')) score += 75;
+
+  if (model.includes('glm-5.1') || model.includes('glm-5')) score += 72;
+  if (model.includes('qwen3.5') || model.includes('qwen3-coder')) score += 68;
+  if (model.includes('minimax-m2.7') || model.includes('minimax-m2.5')) score += 62;
+  if (model.includes('gemini-3')) score += 58;
+  if (model.includes('nemotron-3')) score += 54;
+
+  const ageMs = Date.now() - new Date(entry.modifiedAt).getTime();
+  const ageDays = Number.isFinite(ageMs) ? ageMs / (1000 * 60 * 60 * 24) : 999;
+  if (ageDays <= 2) score += 24;
+  else if (ageDays <= 7) score += 16;
+  else if (ageDays <= 30) score += 8;
+
+  return score;
+}
+
+function recommendationReason(entry: ModelMatrixEntry): string {
+  const model = entry.model.toLowerCase();
+  if (model.includes('kimi')) return 'Kimi cloud card detected; useful as an independent high-stability fallback lane.';
+  if (model.includes('deepseek')) return 'DeepSeek cloud card detected; aligns with the current primary/pro fallback family.';
+  if (model.includes('glm')) return 'GLM cloud card detected; likely useful as a broad reasoning fallback candidate.';
+  if (model.includes('qwen')) return 'Qwen cloud card detected; consider if coding or long-context fallback breadth is needed.';
+  return 'New Ollama Cloud card detected; review before adding to the active fallback order.';
 }
 
 function tokenize(text: string): string[] {
@@ -477,7 +549,11 @@ export async function refreshModelMatrix(force = false): Promise<ModelMatrixEntr
   const tags = await requestWithFallback<OllamaTagsResponse>('/tags', 'GET');
   const entries: ModelMatrixEntry[] = [];
 
-  for (const model of tags.models || []) {
+  const models = cloudModelsOnly()
+    ? (tags.models || []).filter((model) => isCloudModel(model.model || model.name))
+    : (tags.models || []);
+
+  for (const model of models) {
     try {
       const details = await requestWithFallback<OllamaShowResponse>('/show', 'POST', {
         model: model.model || model.name,
@@ -509,18 +585,65 @@ export async function refreshModelMatrix(force = false): Promise<ModelMatrixEntr
 export async function selectBestModel(needs: string[], excludeModel?: string): Promise<ModelMatrixEntry> {
   const matrix = await refreshModelMatrix();
   const candidates = matrix.filter((entry) => {
+    if (cloudModelsOnly() && !isCloudModel(entry.model)) return false;
     if (excludeModel && entry.model === excludeModel) return false;
     return needs.every((need) => entry.capabilities.includes(need));
   });
 
   if (candidates.length === 0) {
+    if (cloudModelsOnly() && needs.length === 0) {
+      const fallback = getCloudFallbackModels().find((model) => model !== excludeModel) || getPrimaryCloudFallbackModel();
+      return fallbackMatrixEntry(fallback);
+    }
     throw new Error(`No model satisfies capabilities: ${needs.join(', ')}`);
   }
 
   return candidates[0];
 }
 
+export async function getCloudFallbackRecommendationReport(force = false): Promise<CloudFallbackRecommendationReport> {
+  const now = Date.now();
+  if (!force && cloudRecommendationCache && now - cloudRecommendationCache.fetchedAt < CLOUD_RECOMMENDATION_TTL_MS) {
+    return cloudRecommendationCache.report;
+  }
+
+  const activeFallbackModels = getCloudFallbackModels();
+  const active = new Set(activeFallbackModels.map((model) => model.toLowerCase()));
+  const matrix = await refreshModelMatrix(force);
+
+  const recommendations = matrix
+    .filter((entry) => isCloudModel(entry.model))
+    .filter((entry) => !active.has(entry.model.toLowerCase()))
+    .map((entry) => ({
+      model: entry.model,
+      modifiedAt: entry.modifiedAt,
+      family: entry.family,
+      parameterSizeRaw: entry.parameterSizeRaw,
+      reason: recommendationReason(entry),
+      score: scoreCloudFallbackCandidate(entry),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return compareIsoDate(a.modifiedAt, b.modifiedAt);
+    })
+    .slice(0, 8);
+
+  const report = {
+    checkedAt: new Date(now).toISOString(),
+    activeFallbackModels,
+    recommendations,
+  };
+
+  cloudRecommendationCache = { fetchedAt: now, report };
+  return report;
+}
+
 async function chatCompletion(model: string, messages: OllamaChatMessage[], think = false): Promise<string> {
+  if (cloudModelsOnly()) {
+    assertCloudModel(model);
+  }
+
   const response = await requestWithFallback<{ message?: { content?: string } }>('/chat', 'POST', {
     model,
     messages,
@@ -529,6 +652,30 @@ async function chatCompletion(model: string, messages: OllamaChatMessage[], thin
   });
 
   return response.message?.content || '';
+}
+
+async function cloudFallbackChatCompletion(
+  messages: OllamaChatMessage[],
+  options: { think?: boolean; excludeModels?: string[] } = {},
+): Promise<{ content: string; model: string }> {
+  const excluded = new Set((options.excludeModels || []).map((model) => model.toLowerCase()));
+  const preferred = getCloudFallbackModels().filter((model) => !excluded.has(model.toLowerCase()));
+  const models = preferred.length > 0 ? preferred : getCloudFallbackModels();
+  let lastError: unknown;
+
+  for (const model of models) {
+    try {
+      const content = await chatCompletion(model, messages, options.think);
+      if (content.trim().length > 0) {
+        return { content, model };
+      }
+      lastError = new Error(`Cloud fallback ${model} returned empty content.`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('All approved cloud fallback models failed.');
 }
 
 function estimateTokenCount(text: string): number {
@@ -633,8 +780,13 @@ export async function answerWithTriplePass(question: string): Promise<AnswerQual
   const anchorPack = buildKnowledgeAnchorContext(anchors, 5200);
   const anchorContext = anchorPack.context;
 
-  const primaryModel = await selectBestModel([]);
-  const verifierModel = await selectBestModel([], primaryModel.model).catch(() => primaryModel);
+  const approvedFallbackModels = getCloudFallbackModels();
+  const primaryModel = cloudModelsOnly()
+    ? fallbackMatrixEntry(approvedFallbackModels[0] || getPrimaryCloudFallbackModel())
+    : await selectBestModel([]);
+  const verifierModel = cloudModelsOnly()
+    ? fallbackMatrixEntry(approvedFallbackModels.find((model) => model !== primaryModel.model) || primaryModel.model)
+    : await selectBestModel([], primaryModel.model).catch(() => primaryModel);
   const contextBudgetChars = computeDynamicContextBudget(question, needFresh);
 
   const primaryFallbackReason =
@@ -703,7 +855,10 @@ export async function answerWithTriplePass(question: string): Promise<AnswerQual
   } catch {
     primaryRouteFailed = true;
     degradedReasons.add('primary_routed_provider_failed');
-    answer = await chatCompletion(primaryModel.model, primaryMessages);
+    const fallback = await cloudFallbackChatCompletion(primaryMessages);
+    answer = fallback.content;
+    modelPrimary = fallback.model;
+    primaryReason = `Routed provider failed; used approved cloud fallback order: ${getCloudFallbackModels().join(' -> ')}.`;
   }
 
   const verificationPrompt: OllamaChatMessage[] = [
@@ -731,7 +886,13 @@ export async function answerWithTriplePass(question: string): Promise<AnswerQual
   } catch {
     verifierRouteFailed = true;
     degradedReasons.add('verifier_routed_provider_failed');
-    verification = await chatCompletion(verifierModel.model, verificationPrompt, true);
+    const fallback = await cloudFallbackChatCompletion(verificationPrompt, {
+      think: true,
+      excludeModels: [modelPrimary],
+    });
+    verification = fallback.content;
+    modelVerifier = fallback.model;
+    verifierReason = `Routed verifier failed; used approved cloud fallback order excluding the primary where possible: ${getCloudFallbackModels().join(' -> ')}.`;
   }
 
   if (primaryRoutedOutcome) {
@@ -795,10 +956,16 @@ export async function answerWithTriplePass(question: string): Promise<AnswerQual
             groundedPrompt,
           );
         } catch {
-          answer = await chatCompletion(primaryModel.model, groundedPrompt);
+          const fallback = await cloudFallbackChatCompletion(groundedPrompt);
+          answer = fallback.content;
+          modelPrimary = fallback.model;
+          primaryReason = `Freshness provider recovery fell back to approved cloud fallback order: ${getCloudFallbackModels().join(' -> ')}.`;
         }
       } else {
-        answer = await chatCompletion(primaryModel.model, groundedPrompt);
+        const fallback = await cloudFallbackChatCompletion(groundedPrompt);
+        answer = fallback.content;
+        modelPrimary = fallback.model;
+        primaryReason = `Freshness recovery used approved cloud fallback order: ${getCloudFallbackModels().join(' -> ')}.`;
       }
     } catch {
       usedWebSearch = false;

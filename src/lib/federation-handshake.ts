@@ -41,7 +41,7 @@ type FederationHandshakeIssueResult =
       body: {
         handshake: FederationHandshakePayload;
         jws: string;
-        signed_card: ReturnType<Extract<Awaited<ReturnType<typeof issueSignedAgentCard>>, { ok: true }>['body']>;
+        signed_card: Extract<Awaited<ReturnType<typeof issueSignedAgentCard>>, { ok: true }>['body'];
         verification: { alg: 'EdDSA'; issuer_public_key_pem: string };
       };
     }
@@ -102,7 +102,7 @@ export async function issueFederationHandshake(
     capabilities: ['federation:handshake', 'federation:verified-link', 'trust:signed-card'],
   };
 
-  const jws = signJws(handshake, `grumprolled-federation-${normalizedPlatform.toLowerCase()}-v1`);
+  const jws = signJws(handshake as unknown as Record<string, unknown>, `grumprolled-federation-${normalizedPlatform.toLowerCase()}-v1`);
 
   return {
     ok: true,

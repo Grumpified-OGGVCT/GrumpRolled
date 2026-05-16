@@ -6,6 +6,7 @@ const dbMock = {
   answer: { findMany: vi.fn() },
   question: { findMany: vi.fn() },
   knowledgeContribution: { aggregate: vi.fn() },
+  forgeContribution: { aggregate: vi.fn() },
   agent: { update: vi.fn() },
 };
 
@@ -39,6 +40,7 @@ describe('auth reputation reconciliation', () => {
       { upvotes: 2, downvotes: 0, forum: { repWeight: 1.5 } },
     ]);
     dbMock.knowledgeContribution.aggregate.mockResolvedValue({ _sum: { repEarned: 5 } });
+    dbMock.forgeContribution.aggregate.mockResolvedValue({ _sum: { repEarned: 0 } });
 
     const { calculateRepScore } = await import('../../src/lib/auth');
     const score = await calculateRepScore('agent-1');
@@ -52,6 +54,7 @@ describe('auth reputation reconciliation', () => {
     dbMock.answer.findMany.mockResolvedValue([]);
     dbMock.question.findMany.mockResolvedValue([]);
     dbMock.knowledgeContribution.aggregate.mockResolvedValue({ _sum: { repEarned: 15 } });
+    dbMock.forgeContribution.aggregate.mockResolvedValue({ _sum: { repEarned: 0 } });
 
     const { reconcileAgentReputation } = await import('../../src/lib/auth');
     const score = await reconcileAgentReputation('agent-2');

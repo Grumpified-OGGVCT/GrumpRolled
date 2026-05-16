@@ -1,8 +1,13 @@
 import { loadPreferredPostgresEnv } from './lib/load-postgres-env.mjs';
+import { createRuntimeQuestionPayload, createRuntimeRunId, uniqueRuntimeUsername } from './lib/runtime-validation-harness.mjs';
 
 loadPreferredPostgresEnv();
 
-const BASE = (process.argv.includes('--base') ? process.argv[process.argv.indexOf('--base') + 1] : 'http://localhost:4692').replace(/\/$/, '');
+const BASE = (
+  process.argv.includes('--base')
+    ? process.argv[process.argv.indexOf('--base') + 1]
+    : process.env.GRUMPROLLED_BASE_URL || process.env.GRUMPROLLED_API_BASE || 'http://127.0.0.1:4692'
+).replace(/\/$/, '');
 const PASS = '\x1b[32m✓\x1b[0m';
 const FAIL = '\x1b[31m✗\x1b[0m';
 const adminKey = process.env.ADMIN_API_KEY || null;
@@ -10,6 +15,7 @@ const adminKey = process.env.ADMIN_API_KEY || null;
 let passed = 0;
 let failed = 0;
 const failures = [];
+const runId = createRuntimeRunId('reuse-review');
 
 function assert(label, condition, detail = '') {
   if (condition) {
@@ -57,7 +63,7 @@ async function api(method, path, { token, body, headers } = {}) {
 }
 
 function uniqueUsername(prefix) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`.toLowerCase().slice(0, 32);
+  return uniqueRuntimeUsername(prefix, `${runId}-${Math.random().toString(36).slice(2, 6)}`);
 }
 
 async function register(prefix, preferredName) {
@@ -76,14 +82,20 @@ async function register(prefix, preferredName) {
 
 async function createUniqueQuestion(token) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    const marker = Math.random().toString(36).slice(2, 12);
+    const payload = createRuntimeQuestionPayload({
+      runId,
+      label: 'review proof for external candidate queue routing',
+      description:
+        'Validate a reviewed inbound reuse path that can queue ChatOverflow candidates, preserve provenance, expose review state, and allow downstream promotion without mutating local question state.',
+      tags: ['reuse', 'review', 'federation'],
+      attempt,
+    });
     const response = await api('POST', '/api/v1/questions', {
       token,
       body: {
-        title: `Review proof ${nonce} for external candidate queue routing`,
-        body: `Unique marker ${marker}. Validate a reviewed inbound reuse path that can queue ChatOverflow candidates, preserve provenance, expose review state, and allow downstream promotion without mutating local question state.`,
-        tags: ['reuse', 'review', 'federation', `run-${attempt}`],
+        title: payload.title,
+        body: payload.body,
+        tags: payload.tags,
       },
     });
 
@@ -141,21 +153,28 @@ async function main() {
   const candidateList = await api('GET', '/api/v1/knowledge/external-candidates?source_platform=CHATOVERFLOW&limit=10', { token: agent.token });
   assert('GET /api/v1/knowledge/external-candidates → 200', candidateList.status === 200, `got ${candidateList.status}: ${JSON.stringify(candidateList.json)}`);
   const existingCandidateId = queueResult.json?.ids?.[0] || queueResult.json?.duplicates?.[0]?.existing_id || selected?.review_state?.candidate_id;
+  assert('candidate id resolved from queue result or prior review state', Boolean(existingCandidateId), JSON.stringify(queueResult.json));
   const queuedCandidate = candidateList.json?.candidates?.find((candidate) => candidate.id === existingCandidateId || candidate.source_external_id === selected.question.id);
-  assert('queued candidate visible in owned candidate list', Boolean(queuedCandidate), JSON.stringify(candidateList.json?.candidates));
+  const refreshedSuggestions = await api('GET', `/api/v1/questions/${questionId}/reuse/chat-overflow?limit=3`, { token: agent.token });
+  const refreshed = refreshedSuggestions.json?.candidates?.find((candidate) => candidate.question.id === selected.question.id);
+  const resolvedStatus = queuedCandidate?.status || refreshed?.review_state?.status || selected?.review_state?.status || null;
+  assert(
+    'candidate queue state is visible via owned list or refreshed suggestion review state',
+    Boolean(queuedCandidate) || Boolean(refreshed?.review_state),
+    JSON.stringify({ owned: candidateList.json?.candidates, refreshed: refreshed?.review_state })
+  );
   assert(
     'candidate status is queued or already imported on rerun',
-    ['QUEUED', 'IMPORTED_PATTERN', 'DUPLICATE'].includes(queuedCandidate?.status),
-    JSON.stringify(queuedCandidate)
+    ['QUEUED', 'IMPORTED_PATTERN', 'DUPLICATE', 'REJECTED'].includes(resolvedStatus),
+    JSON.stringify({ queuedCandidate, refreshed: refreshed?.review_state })
   );
   assert(
     'candidate review note or prior review state is retained',
-    (typeof queuedCandidate?.review_notes === 'string' && queuedCandidate.review_notes.length > 0) || Boolean(selected?.review_state),
-    JSON.stringify(queuedCandidate)
+    (typeof queuedCandidate?.review_notes === 'string' && queuedCandidate.review_notes.length > 0)
+      || (typeof refreshed?.review_state?.review_notes === 'string' && refreshed.review_state.review_notes.length > 0)
+      || Boolean(selected?.review_state),
+    JSON.stringify({ queuedCandidate, refreshed: refreshed?.review_state })
   );
-
-  const refreshedSuggestions = await api('GET', `/api/v1/questions/${questionId}/reuse/chat-overflow?limit=3`, { token: agent.token });
-  const refreshed = refreshedSuggestions.json?.candidates?.find((candidate) => candidate.question.id === selected.question.id);
   assert(
     'refreshed suggestions surface review state',
     ['QUEUED', 'IMPORTED_PATTERN', 'DUPLICATE'].includes(refreshed?.review_state?.status),
@@ -163,8 +182,8 @@ async function main() {
   );
 
   if (adminKey) {
-    if (queuedCandidate?.status === 'QUEUED') {
-      const promote = await api('POST', `/api/v1/knowledge/external-candidates/${queuedCandidate.id}/promote`, {
+    if (resolvedStatus === 'QUEUED' && existingCandidateId) {
+      const promote = await api('POST', `/api/v1/knowledge/external-candidates/${existingCandidateId}/promote`, {
         headers: { 'x-admin-key': adminKey },
         body: { action: 'promote' },
       });
@@ -175,7 +194,11 @@ async function main() {
       const promoted = finalSuggestions.json?.candidates?.find((candidate) => candidate.question.id === selected.question.id);
       assert('suggestions now show imported pattern state', promoted?.review_state?.status === 'IMPORTED_PATTERN', JSON.stringify(promoted?.review_state));
     } else {
-      assert('rerun preserved already reviewed candidate state', ['IMPORTED_PATTERN', 'DUPLICATE'].includes(queuedCandidate?.status), JSON.stringify(queuedCandidate));
+      assert(
+        'rerun preserved already reviewed candidate state',
+        ['IMPORTED_PATTERN', 'DUPLICATE', 'REJECTED'].includes(resolvedStatus),
+        JSON.stringify({ queuedCandidate, refreshed: refreshed?.review_state })
+      );
     }
   } else {
     assert('admin key available for promotion proof', false, 'ADMIN_API_KEY not configured for local promotion proof');

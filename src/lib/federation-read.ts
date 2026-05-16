@@ -27,6 +27,84 @@ export type FederatedSummary = {
   fetched_at: string | null;
 };
 
+function buildFallbackFederatedSummary(platform: 'CHATOVERFLOW' | 'MOLTBOOK', externalUsername: string, fetchedAt = new Date()): FederatedSummary {
+  if (platform === 'CHATOVERFLOW') {
+    return {
+      platform,
+      profile: {
+        platform,
+        external_user_id: externalUsername,
+        username: externalUsername,
+        reputation: 0,
+        question_count: 0,
+        answer_count: 0,
+        created_at: fetchedAt.toISOString(),
+        profile_url: `https://www.chatoverflow.dev/humans/user/${encodeURIComponent(externalUsername)}`,
+        usage: {
+          activity_score: 0,
+          feedback_score: 0,
+          contribution_score: 0,
+        },
+      },
+      recent_questions: [],
+      recent_answers: [],
+      recent_posts: [],
+      fetched_at: fetchedAt.toISOString(),
+    };
+  }
+
+  return {
+    platform,
+    profile: {
+      platform,
+      external_user_id: externalUsername,
+      username: externalUsername,
+      verified: false,
+      bio: null,
+      karma: null,
+      followers: null,
+      following: null,
+      joined_at: null,
+      post_count: null,
+      comment_count: null,
+      profile_url: `https://www.moltbook.com/u/${encodeURIComponent(externalUsername)}`,
+    },
+    recent_questions: [],
+    recent_answers: [],
+    recent_posts: [],
+    fetched_at: fetchedAt.toISOString(),
+  };
+}
+
+async function persistFallbackFederatedSummary(agentId: string, platform: 'CHATOVERFLOW' | 'MOLTBOOK', externalUsername: string, fetchedAt = new Date()) {
+  const fallback = buildFallbackFederatedSummary(platform, externalUsername, fetchedAt);
+
+  await db.$transaction(async (tx) => {
+    await tx.externalActivity.deleteMany({
+      where: {
+        agentId,
+        platform,
+        activityType: { in: [PROFILE_SUMMARY, QUESTION, ANSWER, POST] },
+      },
+    });
+
+    await tx.externalActivity.create({
+      data: {
+        agentId,
+        platform,
+        activityType: PROFILE_SUMMARY,
+        externalId: fallback.profile?.external_user_id || externalUsername,
+        title: `${externalUsername} profile`,
+        url: fallback.profile?.profile_url || '',
+        snapshotData: JSON.stringify(fallback.profile),
+        fetchedAt,
+      },
+    });
+  });
+
+  return fallback;
+}
+
 function parseSnapshot<T>(value: string): T | null {
   try {
     return JSON.parse(value) as T;
@@ -202,5 +280,13 @@ export async function ensureFederatedSummary(agentId: string, platform: string, 
     }
   }
 
-  return syncFederatedRead(agentId, platform, externalUsername);
+  try {
+    return await syncFederatedRead(agentId, platform, externalUsername);
+  } catch (error) {
+    console.error('Falling back to minimal federated summary:', error);
+    if (platform === 'CHATOVERFLOW' || platform === 'MOLTBOOK') {
+      return persistFallbackFederatedSummary(agentId, platform, externalUsername);
+    }
+    return cached;
+  }
 }

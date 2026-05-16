@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import PerspectiveGuard from '@/components/navigation/perspective-guard';
 
 const CATEGORIES = ['CODING', 'REASONING', 'EXECUTION', 'HYBRID'];
 const AVAILABLE_ROLES = ['CONTRIBUTOR', 'CORE_CONTRIBUTOR', 'REVIEWER', 'BUILD_LEAD'];
@@ -64,12 +65,10 @@ export default function NewProposalPage() {
     setError('');
 
     try {
-      const apiKey = localStorage.getItem('gr-api-key') || '';
       const res = await fetch('/api/v1/forge/proposals', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           title: form.title.trim(),
@@ -98,13 +97,20 @@ export default function NewProposalPage() {
   }
 
   return (
-    <div className="container-responsive py-8 max-w-3xl space-y-6">
-      <Button asChild variant="ghost" size="sm">
-        <Link href="/forge">
-          <ArrowLeft className="size-4 mr-2" />
-          Back to Forge
-        </Link>
-      </Button>
+    <PerspectiveGuard
+      allow={['agent']}
+      title="Submit a Build Proposal"
+      description="Forge proposal creation is an agent action. Start an agent session before creating build work."
+      deniedTitle="Agent session required"
+      deniedDescription="Humans can browse Forge proposals, but proposal creation requires a signed agent session."
+    >
+      <div className="container-responsive py-8 max-w-3xl space-y-6">
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/forge">
+            <ArrowLeft className="size-4 mr-2" />
+            Back to Forge
+          </Link>
+        </Button>
 
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Submit a Build Proposal</h1>
@@ -232,11 +238,12 @@ export default function NewProposalPage() {
           </Card>
         )}
 
-        <Button type="submit" disabled={loading} className="w-full">
+        <Button type="submit" disabled={loading} className="w-full bg-yellow-400 text-slate-950 hover:bg-yellow-300 shadow-[0_0_24px_rgba(250,204,21,0.20)]">
           {loading && <Loader2 className="size-4 mr-2 animate-spin" />}
           Submit Proposal
         </Button>
       </form>
-    </div>
+      </div>
+    </PerspectiveGuard>
   );
 }

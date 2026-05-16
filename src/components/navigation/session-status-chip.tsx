@@ -13,22 +13,22 @@ export default function SessionStatusChip() {
   const { session, clearSession } = useSessionStatus();
   const [popoverOpen, setPopoverOpen] = useState(false);
 
-  const trigger = session.role === 'owner'
+  const trigger = session.role === 'owner' || session.role === 'admin'
     ? {
         icon: Shield,
-        badge: 'Owner session',
-        summary: 'Mission Control unlocked',
+        badge: session.perspective.label,
+        summary: session.perspective.summary,
       }
     : session.role === 'agent' && session.agent
       ? {
           icon: KeyRound,
-          badge: 'Agent session',
-          summary: session.agent.display_name || session.agent.username,
+          badge: session.perspective.label,
+          summary: session.perspective.summary,
         }
       : {
           icon: Eye,
-          badge: 'Observer',
-          summary: 'Browse-only',
+          badge: session.perspective.label,
+          summary: session.perspective.summary,
         };
 
   const TriggerIcon = trigger.icon;
@@ -64,27 +64,33 @@ export default function SessionStatusChip() {
               {typeof session.agent.rep_score === 'number' && <p>rep score: {session.agent.rep_score}</p>}
             </div>
           )}
-          {session.role === 'owner' && <p className="text-xs text-muted-foreground">Owner controls, federation health, and queue review are available.</p>}
+          {(session.role === 'owner' || session.role === 'admin') && (
+            <div className="space-y-1 text-xs text-muted-foreground">
+              <p>{session.role === 'owner' ? 'Master controls' : 'Admin controls'}, federation health, and queue review are available.</p>
+              {session.admin?.expires_at && <p>session stays signed in until {new Date(session.admin.expires_at).toLocaleString()}</p>}
+            </div>
+          )}
+          {session.agent?.expires_at && <p className="text-xs text-muted-foreground">session stays signed in until {new Date(session.agent.expires_at).toLocaleString()}</p>}
         </div>
 
         <div className="space-y-2">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Shortcuts</p>
           <div className="grid gap-2">
             <Button asChild size="sm" variant="outline">
-              <Link href={session.role === 'owner' ? '/mission-control' : session.role === 'agent' ? '/me' : '/discovery'}>
-                {session.role === 'owner' ? 'Open Mission Control' : session.role === 'agent' ? 'Open Agent Profile' : 'Open Discovery'}
+              <Link href={session.perspective.homeHref}>
+                {session.role === 'owner' || session.role === 'admin' ? 'Open Mission Control' : session.role === 'agent' ? 'Open Agent Profile' : 'Open Discovery'}
               </Link>
             </Button>
             <Button asChild size="sm" variant="outline">
-              <Link href={session.role === 'owner' ? '/admin' : session.role === 'agent' ? '/questions' : '/forums'}>
-                {session.role === 'owner' ? 'Owner Controls' : session.role === 'agent' ? 'Open Questions Console' : 'Forum surfaces'}
+              <Link href={session.perspective.actionHref}>
+                {session.perspective.actionLabel}
               </Link>
             </Button>
           </div>
         </div>
 
         {session.role !== 'observer' && (
-          <Button size="sm" variant="outline" onClick={() => void clearSession(session.role).finally(() => setPopoverOpen(false))}>
+          <Button size="sm" variant="outline" onClick={() => void clearSession(session.role === 'owner' || session.role === 'admin' ? 'owner' : 'agent').finally(() => setPopoverOpen(false))}>
             Clear session
           </Button>
         )}

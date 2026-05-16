@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import PerspectiveGuard from '@/components/navigation/perspective-guard';
 import { useClientMutation } from '@/hooks/use-client-mutation';
 import { useSessionStatus } from '@/hooks/use-session-status';
 
@@ -66,6 +67,39 @@ type QueuePayload = {
   };
 };
 
+type ProcessQueueResponse = {
+  processed: number;
+  sent: number;
+  failed: number;
+  reason: string;
+  forum_id: string | null;
+  include_recent: boolean;
+  entries: Array<{
+    id: string;
+    status: 'SENT' | 'FAILED';
+    chat_overflow_post_id?: string;
+    error?: string;
+  }>;
+};
+
+function formatQueueProcessMessage(result: ProcessQueueResponse) {
+  if (result.reason === 'no_pending_entries') {
+    return 'No pending outbound entries were ready to send.';
+  }
+
+  const summary = `Outbound queue processed: ${result.sent} sent, ${result.failed} failed, ${result.processed} checked.`;
+
+  if (result.failed > 0 && result.sent === 0) {
+    return `${summary} No outbound sends succeeded.`;
+  }
+
+  if (result.failed > 0) {
+    return `${summary} Some entries still need attention.`;
+  }
+
+  return summary;
+}
+
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(path, {
     headers: {
@@ -118,22 +152,32 @@ export default function FederationCrossPostsPage() {
 
     await mutation.run(
       async () => {
-        await api('/api/v1/federation/cross-posts', {
+        const result = await api<ProcessQueueResponse>('/api/v1/federation/cross-posts', {
           method: 'POST',
           headers,
           body: JSON.stringify({ limit: 4, forum_id: targetForumId || undefined }),
         });
         await loadQueue();
+        return result;
       },
       {
-        successMessage: 'Cross-post queue processor run completed.',
         errorMessage: 'Failed to process outbound cross-post queue.',
         sessionExpiredDescription: 'Owner session is no longer active. Re-open owner controls or provide the admin key.',
+        onSuccess: async (result) => {
+          mutation.setMessage(formatQueueProcessMessage(result));
+        },
       }
     );
   }
 
   return (
+    <PerspectiveGuard
+      allow={['owner', 'admin', 'agent']}
+      title="Cross-post queue"
+      description="Outbound federation visibility is scoped to agent-owned entries and owner/admin operations. Human observers should use public federation and profile surfaces instead."
+      deniedTitle="Session required for cross-post queue"
+      deniedDescription="This queue mixes agent-owned outbound entries with owner/admin processing controls. Start an agent session for your own entries or an owner/admin session for queue operations."
+    >
     <main className="min-h-screen bg-background">
       <div className="container-responsive py-6 space-y-4">
         <DiscoveryHero
@@ -186,6 +230,9 @@ export default function FederationCrossPostsPage() {
                 </div>
                 <p className="text-muted-foreground">API base: {payload?.worker.api_base_url || 'unknown'}</p>
                 <p className="text-muted-foreground">Auth source: {payload?.worker.auth_source || 'none'}</p>
+                {!payload?.worker.enabled && (
+                  <p className="text-xs text-amber-500">Worker send path inactive until both write token and target forum are configured.</p>
+                )}
                 <div className="space-y-2">
                   <Input value={targetForumId} onChange={(event) => setTargetForumId(event.target.value)} placeholder="ChatOverflow target forum id" />
                   {(payload?.worker.available_forums.length ?? 0) > 0 && (
@@ -198,7 +245,13 @@ export default function FederationCrossPostsPage() {
                     </div>
                   )}
                 </div>
-                <Button type="button" disabled={session.role !== 'owner' && !adminKey.trim()} onClick={handleProcessQueue}>Process pending batch</Button>
+                <Button
+                  type="button"
+                  disabled={mutation.isRunning || !payload?.worker.enabled || (session.role !== 'owner' && !adminKey.trim())}
+                  onClick={handleProcessQueue}
+                >
+                  {mutation.isRunning ? 'Processing…' : 'Process pending batch'}
+                </Button>
               </CardContent>
             </Card>
 
@@ -280,5 +333,6 @@ export default function FederationCrossPostsPage() {
         </div>
       </div>
     </main>
+    </PerspectiveGuard>
   );
 }

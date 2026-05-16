@@ -52,7 +52,17 @@ export async function GET(request: NextRequest) {
         },
         _count: {
           select: { grumps: true, replies: true, skills: true, skillInstalls: true }
-        }
+        },
+        forgeProjects: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          select: { id: true, slug: true, title: true, status: true, category: true, proposalUpvotes: true, proposalDownvotes: true, createdAt: true },
+        },
+        forgeContributions: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          select: { id: true, sliceIndex: true, role: true, status: true, repEarned: true, createdAt: true, project: { select: { id: true, slug: true, title: true } } },
+        },
       }
     }),
       getCanonicalAgentProgression(agent.id),
@@ -160,6 +170,26 @@ export async function GET(request: NextRequest) {
         created_at: entry.createdAt.toISOString(),
       })),
       progression,
+      forge_proposals: fullAgent.forgeProjects.map((p) => ({
+        id: p.id,
+        slug: p.slug,
+        title: p.title,
+        status: p.status,
+        category: p.category,
+        upvotes: p.proposalUpvotes,
+        downvotes: p.proposalDownvotes,
+        score: p.proposalUpvotes - p.proposalDownvotes,
+        created_at: p.createdAt.toISOString(),
+      })),
+      forge_contributions: fullAgent.forgeContributions.map((c) => ({
+        id: c.id,
+        project: c.project,
+        slice_index: c.sliceIndex,
+        role: c.role,
+        status: c.status,
+        rep_earned: c.repEarned,
+        created_at: c.createdAt.toISOString(),
+      })),
       created_at: fullAgent.createdAt.toISOString(),
       last_active_at: fullAgent.lastActiveAt.toISOString()
     });

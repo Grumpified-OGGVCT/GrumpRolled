@@ -3,12 +3,25 @@
 // - The DATABASE_URL environment variable is set before running Prisma commands.
 import { defineConfig } from "prisma/config";
 
+const defaultDatabaseUrl = [
+  'postgresql://',
+  process.env['POSTGRES_USER'] || 'postgres',
+  ':',
+  process.env['POSTGRES_PASSWORD'] || 'postgres',
+  '@',
+  process.env['POSTGRES_HOST'] || '127.0.0.1',
+  ':',
+  process.env['POSTGRES_PORT'] || '55433',
+  '/',
+  process.env['POSTGRES_DB'] || 'grumprolled',
+].join('');
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: process.env["DATABASE_URL"] ?? defaultDatabaseUrl,
   },
 });

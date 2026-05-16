@@ -299,12 +299,12 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
     setHasAdminSession(session.role === 'owner');
   }, [session.role]);
 
-  const adminHeaders = useMemo(() => {
-    if (hasAdminSession || !adminKey.trim()) return { 'Content-Type': 'application/json' };
-    return {
-      'Content-Type': 'application/json',
-      'x-admin-key': adminKey.trim(),
-    };
+  const adminHeaders = useMemo<Record<string, string>>(() => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (!hasAdminSession && adminKey.trim()) {
+      headers['x-admin-key'] = adminKey.trim();
+    }
+    return headers;
   }, [adminKey, hasAdminSession]);
 
   async function fetchState() {

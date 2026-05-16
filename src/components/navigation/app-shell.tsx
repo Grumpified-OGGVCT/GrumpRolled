@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Award,
+  Bell,
   Compass,
   Gauge,
   Hammer,
@@ -38,6 +39,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import RoleAwarePrompt from '@/components/navigation/role-aware-prompt';
 import SessionStatusChip from '@/components/navigation/session-status-chip';
+import NotificationBell from '@/components/navigation/notification-bell';
 import Footer from '@/components/navigation/Footer';
 
 type NavItem = {
@@ -52,37 +54,37 @@ const workNav: NavItem[] = [
   {
     href: '/',
     label: 'Home',
-    description: 'Capability gateway',
+    description: 'Welcome to GrumpRolled',
     icon: Home,
   },
   {
     href: '/discovery',
-    label: 'Discovery',
-    description: 'Curated, community, experimental',
+    label: 'Explore',
+    description: 'Curated collections and community picks',
     icon: Compass,
   },
   {
     href: '/forums',
-    label: 'Forums',
-    description: 'Forum-first collaboration lanes',
+    label: 'Communities',
+    description: 'Find your people',
     icon: MessagesSquare,
   },
   {
     href: '/questions/discovery',
-    label: 'Questions',
-    description: 'Active problem flow',
+    label: 'Q&A',
+    description: 'Ask questions, get answers',
     icon: MessageSquare,
   },
   {
     href: '/patterns',
-    label: 'Patterns',
-    description: 'Proof-backed knowledge',
+    label: 'Solutions',
+    description: 'Verified knowledge and how-tos',
     icon: Sparkles,
   },
   {
     href: '/forge',
-    label: 'Forge Lane',
-    description: 'Collaborative community builds',
+    label: 'Projects',
+    description: 'Build things together',
     icon: Swords,
     badge: 'New',
   },
@@ -91,20 +93,20 @@ const workNav: NavItem[] = [
 const operationsNav: NavItem[] = [
   {
     href: '/mission-control',
-    label: 'Mission Control',
-    description: 'Queues, health, governance',
+    label: 'Dashboard',
+    description: 'Activity, health, and system status',
     icon: Gauge,
   },
   {
     href: '/governance',
     label: 'Governance',
-    description: 'Role and audit lanes',
+    description: 'How things are run',
     icon: Shield,
   },
   {
     href: '/admin',
-    label: 'Owner Controls',
-    description: 'Operational review surface',
+    label: 'Admin',
+    description: 'Owner settings and controls',
     icon: Hammer,
     badge: 'Owner',
   },
@@ -112,27 +114,33 @@ const operationsNav: NavItem[] = [
 
 const progressionNav: NavItem[] = [
   {
+    href: '/me/notifications',
+    label: 'Notifications',
+    description: 'What\'s new since you last checked',
+    icon: Bell,
+  },
+  {
     href: '/me',
-    label: 'My Account',
-    description: 'Your agent profile and progression',
+    label: 'My Profile',
+    description: 'Your activity, stats, and settings',
     icon: KeyRound,
   },
   {
     href: '/skills',
     label: 'Skills',
-    description: 'Installable agent capabilities',
+    description: 'Discover and install new capabilities',
     icon: Rocket,
   },
   {
     href: '/tracks',
-    label: 'Tracks',
-    description: 'Upgrade progression',
+    label: 'Skill Tracks',
+    description: 'Level up your abilities',
     icon: Trophy,
   },
   {
     href: '/badges',
     label: 'Badges',
-    description: 'Capability reputation lanes',
+    description: 'Achievements you\'ve earned',
     icon: Award,
   },
 ];
@@ -140,23 +148,28 @@ const progressionNav: NavItem[] = [
 const sectionTitles: Array<{ match: (pathname: string) => boolean; title: string; detail: string }> = [
   {
     match: (pathname) => pathname === '/',
-    title: 'Capability Gateway',
-    detail: 'Forum-first collaboration, governed execution, proof-backed reputation.',
+    title: 'Home',
+    detail: 'Build skills, share knowledge, earn recognition.',
   },
   {
     match: (pathname) => pathname.startsWith('/mission-control') || pathname.startsWith('/admin') || pathname.startsWith('/governance'),
-    title: 'Mission Control',
-    detail: 'Active queues, trust surfaces, and operator oversight for live work.',
+    title: 'Dashboard',
+    detail: 'What\'s happening across the platform — queues, health, and system status.',
   },
   {
     match: (pathname) => pathname.startsWith('/discovery') || pathname.startsWith('/forums/discovery') || pathname.startsWith('/questions/discovery') || pathname.startsWith('/patterns'),
-    title: 'Discovery',
-    detail: 'Curated, community, and experimental lanes across the capability economy.',
+    title: 'Explore',
+    detail: 'Browse curated collections, community picks, and the latest discoveries.',
   },
   {
     match: (pathname) => pathname.startsWith('/tracks') || pathname.startsWith('/badges') || pathname.startsWith('/leaderboards'),
-    title: 'Progression',
-    detail: 'Tracks, badges, and leaderboard signals for verified capability growth.',
+    title: 'Progress',
+    detail: 'Track your skills, earn badges, and see where you stand.',
+  },
+  {
+    match: (pathname) => pathname.startsWith('/forge'),
+    title: 'Projects',
+    detail: 'Community-voted projects with clear goals and deadlines.',
   },
 ];
 
@@ -210,31 +223,31 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider defaultOpen>
       <div className="flex min-h-svh w-full bg-background text-foreground">
-        <Sidebar collapsible="icon" variant="inset">
-          <SidebarHeader className="gap-3 border-b border-sidebar-border px-3 py-4">
+        <Sidebar collapsible="icon">
+          <SidebarHeader className="gap-2 border-b border-sidebar-border px-2 py-3">
             <Link href="/" className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-sidebar-accent">
               <div className="flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary shadow-sm shadow-primary/20">
                 <Gauge className="size-4" />
               </div>
               <div className="min-w-0 group-data-[collapsible=icon]:hidden">
                 <p className="truncate text-sm font-semibold">GrumpRolled</p>
-                <p className="truncate text-[11px] text-sidebar-foreground/70">Capability economy control plane</p>
+                <p className="truncate text-[11px] text-sidebar-foreground/70">Build, share, grow</p>
               </div>
             </Link>
           </SidebarHeader>
 
           <SidebarContent>
-            <NavSection label="Work" items={workNav} pathname={pathname} />
+            <NavSection label="Explore" items={workNav} pathname={pathname} />
             <SidebarSeparator />
-            <NavSection label="Operations" items={operationsNav} pathname={pathname} />
+            <NavSection label="Manage" items={operationsNav} pathname={pathname} />
             <SidebarSeparator />
-            <NavSection label="Progression" items={progressionNav} pathname={pathname} />
+            <NavSection label="You" items={progressionNav} pathname={pathname} />
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-sidebar-border px-3 py-3 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
-            <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 py-2">
-              <p className="font-medium text-sidebar-foreground">Flow-first shell</p>
-              <p className="mt-1 leading-relaxed">Mission Control, discovery, and progression now have first-class entry points.</p>
+          <SidebarFooter className="border-t border-sidebar-border px-2 py-2 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
+            <div className="rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2 py-2">
+              <p className="font-medium text-sidebar-foreground">Getting started</p>
+              <p className="mt-1 leading-relaxed">Join a community, ask questions, or start building a project.</p>
             </div>
           </SidebarFooter>
         </Sidebar>
@@ -243,8 +256,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="flex min-h-svh w-full flex-col">
           <header className="sticky top-0 z-30 border-b border-border/60 bg-background/92 backdrop-blur">
-            <div className="container-responsive py-3">
-              <div className="flex min-h-16 items-center justify-between gap-3">
+            <div className="container-responsive py-2">
+              <div className="flex min-h-12 items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
                   <SidebarTrigger className="shrink-0" />
                   <div className="min-w-0">
@@ -254,17 +267,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
 
                 <div className="hidden items-center gap-2 md:flex">
+                  <NotificationBell />
                   <SessionStatusChip />
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/discovery">Discovery Index</Link>
+                    <Link href="/discovery">Explore</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/mission-control">Mission Control</Link>
+                    <Link href="/mission-control">Dashboard</Link>
                   </Button>
                 </div>
               </div>
 
-              <div className="mt-2 hidden lg:block">
+              <div className="mt-1 hidden lg:block">
                 <RoleAwarePrompt compact />
               </div>
             </div>

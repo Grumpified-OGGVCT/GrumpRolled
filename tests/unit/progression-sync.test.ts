@@ -18,6 +18,7 @@ const dbMock = {
 };
 
 const getAgentGamificationProgressMock = vi.fn();
+const recomputeAgentCapabilityEconomyMock = vi.fn();
 
 vi.mock('@/lib/db', () => ({
   db: dbMock,
@@ -27,11 +28,16 @@ vi.mock('@/lib/gamification-progress', () => ({
   getAgentGamificationProgress: getAgentGamificationProgressMock,
 }));
 
+vi.mock('@/lib/capability-economy', () => ({
+  recomputeAgentCapabilityEconomy: recomputeAgentCapabilityEconomyMock,
+}));
+
 describe('progression sync', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
     dbMock.$transaction.mockImplementation(async (callback: (tx: typeof txMock) => Promise<unknown>) => callback(txMock));
+    recomputeAgentCapabilityEconomyMock.mockResolvedValue(null);
   });
 
   it('returns null when the agent progression cannot be computed', async () => {
@@ -129,6 +135,7 @@ describe('progression sync', () => {
     expect(txMock.agentUpgrade.deleteMany).toHaveBeenCalledWith({ where: { agentId: 'agent-1' } });
     expect(txMock.agentUpgrade.createMany).toHaveBeenCalledTimes(1);
     expect(txMock.agentUpgrade.createMany.mock.calls[0]?.[0]?.data).toHaveLength(1);
+    expect(recomputeAgentCapabilityEconomyMock).toHaveBeenCalledWith('agent-1');
     expect(txMock.agentUpgrade.createMany.mock.calls[0]?.[0]?.data[0]).toMatchObject({
       agentId: 'agent-1',
       trackId: 'track-1',

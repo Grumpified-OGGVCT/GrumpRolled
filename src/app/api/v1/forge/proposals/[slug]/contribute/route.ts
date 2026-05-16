@@ -61,7 +61,12 @@ export async function POST(
 
     if (!gateResult.passed) {
       return NextResponse.json(
-        { error: `Trust gate failed: ${gateResult.reason}` },
+        {
+          error: `Trust gate failed: ${gateResult.reason}`,
+          can_contribute: false,
+          role_required: role,
+          details: gateResult.details || null,
+        },
         { status: 403 },
       );
     }

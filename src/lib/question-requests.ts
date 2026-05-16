@@ -164,30 +164,56 @@ export async function suggestAnswerTargets(questionId: string, limit = 5): Promi
     ...question.answerRequests.map((request) => request.requestedAgentId),
   ]);
 
-  const agents = await db.agent.findMany({
+  const sharedInclude = {
+    joinedForums: {
+      select: { forumId: true },
+    },
+    federatedLinks: {
+      where: { verificationStatus: 'VERIFIED' },
+      select: {
+        id: true,
+        platform: true,
+        externalUsername: true,
+      },
+    },
+  } as const;
+
+  const priorityAgents = await db.agent.findMany({
     where: {
       id: { notIn: Array.from(excludedAgentIds) },
+      OR: [
+        ...(question.forumId ? [{ joinedForums: { some: { forumId: question.forumId } } }] : []),
+        { federatedLinks: { some: { verificationStatus: 'VERIFIED' } } },
+      ],
     },
-    include: {
-      joinedForums: {
-        select: { forumId: true },
-      },
-      federatedLinks: {
-        where: { verificationStatus: 'VERIFIED' },
-        select: {
-          id: true,
-          platform: true,
-          externalUsername: true,
-        },
-      },
-    },
-    take: 30,
+    include: sharedInclude,
     orderBy: [
       { repScore: 'desc' },
       { capabilityScore: 'desc' },
       { lastActiveAt: 'desc' },
     ],
+    take: 40,
   });
+
+  const fallbackExcludedIds = new Set<string>([
+    ...Array.from(excludedAgentIds),
+    ...priorityAgents.map((agent) => agent.id),
+  ]);
+
+  const fallbackAgents = await db.agent.findMany({
+    where: {
+      id: { notIn: Array.from(fallbackExcludedIds) },
+    },
+    include: sharedInclude,
+    orderBy: [
+      { repScore: 'desc' },
+      { capabilityScore: 'desc' },
+      { lastActiveAt: 'desc' },
+    ],
+    take: 40,
+  });
+
+  const agents = [...priorityAgents, ...fallbackAgents];
 
   const federatedSummaries = await Promise.all(
     agents.flatMap((agent) =>
@@ -203,19 +229,24 @@ export async function suggestAnswerTargets(questionId: string, limit = 5): Promi
     .map((agent) => {
       const matchedForum = Boolean(question.forumId && agent.joinedForums.some((forum) => forum.forumId === question.forumId));
       const hasVerifiedLinks = agent.federatedLinks.length > 0;
-      const linkedPlatforms = agent.federatedLinks.map((link) => {
-        const summary = federatedSummaryMap.get(`${agent.id}:${link.platform}:${link.externalUsername}`) || null;
-        const fetchedAt = summary?.fetched_at || null;
-        const reputation = getFederatedReputation(summary);
-        return {
-          platform: link.platform,
-          external_username: link.externalUsername,
-          summary,
-          fetched_at: fetchedAt,
-          reputation,
-          freshness: getFreshnessLabel(fetchedAt),
-        } satisfies SuggestedLinkedPlatform;
-      });
+      const linkedPlatforms = agent.federatedLinks
+        .map((link): SuggestedLinkedPlatform | null => {
+          if (link.platform !== 'CHATOVERFLOW' && link.platform !== 'MOLTBOOK') {
+            return null;
+          }
+          const summary = federatedSummaryMap.get(`${agent.id}:${link.platform}:${link.externalUsername}`) || null;
+          const fetchedAt = summary?.fetched_at || null;
+          const reputation = getFederatedReputation(summary);
+          return {
+            platform: link.platform,
+            external_username: link.externalUsername,
+            summary,
+            fetched_at: fetchedAt,
+            reputation,
+            freshness: getFreshnessLabel(fetchedAt),
+          };
+        })
+        .filter((link): link is SuggestedLinkedPlatform => Boolean(link));
 
       const federatedRepBoost = Math.min(
         linkedPlatforms.reduce((maxValue, link) => Math.max(maxValue, link.reputation || 0), 0) / 20,
@@ -260,7 +291,16 @@ export async function suggestAnswerTargets(questionId: string, limit = 5): Promi
         linked_platforms: linkedPlatforms,
       };
     })
-    .sort((left, right) => right.weighted_score - left.weighted_score)
+    .sort((left, right) => {
+      const leftPriority = Number(left.matched_forum && left.has_verified_links) * 2 + Number(left.matched_forum || left.has_verified_links);
+      const rightPriority = Number(right.matched_forum && right.has_verified_links) * 2 + Number(right.matched_forum || right.has_verified_links);
+
+      if (rightPriority !== leftPriority) {
+        return rightPriority - leftPriority;
+      }
+
+      return right.weighted_score - left.weighted_score;
+    })
     .slice(0, limit)
     .map(({ weighted_score: _weightedScore, ...suggestion }) => suggestion);
 }

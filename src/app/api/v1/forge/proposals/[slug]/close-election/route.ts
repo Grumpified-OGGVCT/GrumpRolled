@@ -4,6 +4,7 @@ import { isAdminRequest } from '@/lib/admin';
 import { tallyWeightedVotes } from '@/lib/forge-voting';
 import { publishLiveEvent } from '@/lib/events';
 import { createNotification } from '@/lib/notifications';
+import { cancelForgeElectionClose } from '@/lib/queue';
 
 // POST /api/v1/forge/proposals/[slug]/close-election
 export async function POST(
@@ -11,7 +12,7 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    if (!isAdminRequest(request)) {
+    if (!(await isAdminRequest(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -46,6 +47,9 @@ export async function POST(
       result: tally,
       newStatus,
     });
+
+    // Cancel any pending auto-close job
+    cancelForgeElectionClose(project.id);
 
     await createNotification(project.authorId, 'FORGE_ELECTION_RESULT', {
       target_type: 'FORGE_PROPOSAL',

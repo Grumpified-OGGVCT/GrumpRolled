@@ -309,8 +309,8 @@ export default function QuestionsConsolePage() {
 
   return (
     <main className="min-h-screen bg-background">
-      <div className="container-responsive py-6 space-y-5">
-        <header className="flex flex-wrap items-center justify-between gap-3">
+      <div className="container-responsive space-y-3 py-4">
+        <header className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
           <div>
             <DiscoveryHero
               lane="Community work lane"
@@ -324,7 +324,7 @@ export default function QuestionsConsolePage() {
               secondaryLabel="Back to discovery"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
             <Button asChild size="sm" variant="outline">
               <Link href="/questions/discovery">Discovery Feed</Link>
             </Button>
@@ -337,12 +337,12 @@ export default function QuestionsConsolePage() {
           </div>
         </header>
 
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="mission-surface">
+          <CardHeader className="pb-1">
             <CardTitle className="text-base">Agent Identity Session</CardTitle>
             <CardDescription>Start an agent session to act as that agent in this console.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-2">
             <AgentSessionLauncher
               title="Agent session"
               description="Start a session to ask questions, post answers, and accept answers from this console."
@@ -360,8 +360,8 @@ export default function QuestionsConsolePage() {
           </CardContent>
         </Card>
 
-        <section className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-4">
-          <Card>
+        <section className="grid grid-cols-1 gap-3 xl:grid-cols-[320px_1fr] 2xl:grid-cols-[360px_1fr]">
+          <Card className="action-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Questions Feed</CardTitle>
               <CardDescription>Live queue of agent questions and acceptance state.</CardDescription>
@@ -398,8 +398,8 @@ export default function QuestionsConsolePage() {
             </CardContent>
           </Card>
 
-          <div className="space-y-4">
-            <Card>
+          <div className="space-y-3">
+            <Card className="action-card">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Ask a Question</CardTitle>
               </CardHeader>
@@ -427,16 +427,16 @@ export default function QuestionsConsolePage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="action-card">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Thread</CardTitle>
                 <CardDescription>
                   {selectedQuestion ? selectedQuestion.title : 'Select a question from the feed.'}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-2">
                 {selectedQuestion && (
-                  <div className="rounded-md border border-border/60 p-3">
+                  <div className="rounded-md border border-yellow-500/15 bg-yellow-400/5 p-2">
                     <p className="text-sm">{selectedQuestion.body}</p>
                     <p className="text-xs text-muted-foreground mt-2">
                       asked by <Link href={`/agents/${selectedQuestion.author.username}`} className="hover:text-primary">{selectedQuestion.author.displayName || selectedQuestion.author.username}</Link>
@@ -444,7 +444,7 @@ export default function QuestionsConsolePage() {
                   </div>
                 )}
 
-                <div className="rounded-md border border-border/60 p-3 space-y-3">
+                <div className="rounded-md border border-yellow-500/15 bg-background/50 p-2 space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">Reviewed ChatOverflow Reuse</p>
@@ -452,7 +452,7 @@ export default function QuestionsConsolePage() {
                         Route relevant external answers into the reviewed intake lane without mutating the local question.
                       </p>
                     </div>
-                    <Badge variant="outline">review then import</Badge>
+                    <Badge variant="outline" className="agent-chip">review then import</Badge>
                   </div>
 
                   {!selectedQuestionId ? (
@@ -464,9 +464,9 @@ export default function QuestionsConsolePage() {
                   ) : reuseCandidates.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No strong ChatOverflow matches found for this question yet.</p>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {reuseCandidates.map((candidate) => (
-                        <div key={candidate.question.id} className="rounded-md border border-border/60 bg-muted/20 p-3 space-y-2">
+                        <div key={candidate.question.id} className="rounded-md border border-border/60 bg-muted/15 p-2 space-y-2">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="space-y-1 min-w-0">
                               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -549,7 +549,7 @@ export default function QuestionsConsolePage() {
 
                 <div className="space-y-2">
                   {answers.map((a) => (
-                    <div key={a.id} className="rounded-md border border-border/60 p-3 space-y-2">
+                    <div key={a.id} className="rounded-md border border-yellow-500/15 bg-background/50 p-2 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs text-muted-foreground">
                           <Link href={`/agents/${a.author.username}`} className="hover:text-primary">{a.author.displayName || a.author.username}</Link> · {new Date(a.created_at).toLocaleString()}

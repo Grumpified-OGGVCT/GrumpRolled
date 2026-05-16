@@ -5,6 +5,8 @@ const VALID_TYPES = new Set<LiveEventType>([
   'vote:grump', 'vote:question', 'vote:answer',
   'grump:created', 'question:created', 'answer:created', 'answer:accepted',
   'notification', 'reputation:changed', 'progression:changed',
+  'forge:vote', 'forge:proposal_created', 'forge:election_started',
+  'forge:election_closed', 'forge:ratified', 'forge:brief_frozen', 'forge:contribution',
 ]);
 
 // GET /api/v1/events?types=vote:grump,vote:question,...
@@ -20,23 +22,40 @@ export async function GET(request: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      // Send initial keepalive
-      controller.enqueue(encoder.encode(':ok\n\n'));
+      let closed = false;
+      let heartbeat: ReturnType<typeof setInterval> | null = null;
+      let subscription: Awaited<ReturnType<typeof subscribeToEvents>> | null = null;
 
-      const heartbeat = setInterval(() => {
-        controller.enqueue(encoder.encode(':ping\n\n'));
+      const close = async () => {
+        if (closed) return;
+        closed = true;
+        if (heartbeat) clearInterval(heartbeat);
+        await subscription?.unsubscribe();
+      };
+
+      const enqueue = (chunk: string) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(chunk));
+        } catch {
+          void close();
+        }
+      };
+
+      // Send initial keepalive
+      enqueue(':ok\n\n');
+
+      heartbeat = setInterval(() => {
+        enqueue(':ping\n\n');
       }, 15000);
 
-      const subscription = await subscribeToEvents(types, (event) => {
+      subscription = await subscribeToEvents(types, (event) => {
         const data = `data: ${JSON.stringify(event)}\n\n`;
-        controller.enqueue(encoder.encode(data));
+        enqueue(data);
       });
 
       // Cleanup on stream close
-      request.signal.addEventListener('abort', async () => {
-        clearInterval(heartbeat);
-        await subscription.unsubscribe();
-      });
+      request.signal.addEventListener('abort', () => void close());
     },
   });
 

@@ -151,14 +151,14 @@ describe('ollama-cloud routed execution', () => {
     expect(secondCallOptions.excludeProviderIds).toEqual(['deepseek']);
   });
 
-  it('falls back to Ollama chat path when routed execution fails', async () => {
+  it('falls back to approved Ollama Cloud model cards when routed execution fails', async () => {
     executeWithProviderFailoverMock.mockRejectedValue(new Error('Routed provider unavailable'));
 
     const { answerWithTriplePass } = await import('../../src/lib/ollama-cloud');
     const result = await answerWithTriplePass('Explain cache consistency for prior answers.');
 
     expect(result.answer).toBe('Fallback answer from Ollama path.');
-    expect(result.modelPrimary).toBe('matrix-model');
+    expect(result.modelPrimary).toBe('deepseek-v4-pro:cloud');
     expect(result.primaryTransparency.provider_id).toBe('ollama-cloud');
     expect(result.primaryTransparency.provider_name).toContain('Ollama Cloud');
     expect(result.degradedState.primaryRouteFailed).toBe(true);
@@ -168,6 +168,9 @@ describe('ollama-cloud routed execution', () => {
     const fetchMock = vi.mocked(global.fetch);
     const chatCalls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/chat'));
     expect(chatCalls.length).toBeGreaterThanOrEqual(2);
+
+    const firstChatBody = JSON.parse(String(chatCalls[0][1]?.body || '{}')) as { model?: string };
+    expect(firstChatBody.model).toBe('deepseek-v4-pro:cloud');
   });
 
   it('uses the Ollama web-search sidecar with a routed provider when freshness is required', async () => {

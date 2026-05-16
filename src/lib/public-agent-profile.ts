@@ -34,7 +34,7 @@ export async function getPublicAgentProfileByUsername(username: string) {
   const agentAnswerIds = (await db.answer.findMany({ where: { authorId: agent.id }, select: { id: true } })).map(a => a.id);
   const agentQuestionIds = (await db.question.findMany({ where: { authorId: agent.id }, select: { id: true } })).map(q => q.id);
 
-  const [progression, acceptedAnswerCount, recentGrumps, federatedSummaries, publishedSkills, installedSkills, outboundCrossPosts] = await Promise.all([
+  const [progression, acceptedAnswerCount, recentGrumps, federatedSummaries, publishedSkills, installedSkills, outboundCrossPosts, forgeProjects, forgeContributions] = await Promise.all([
     getCanonicalAgentProgression(agent.id),
     db.answer.count({ where: { authorId: agent.id, isAccepted: true, is_deleted: false } }),
     db.grump.findMany({
@@ -86,6 +86,18 @@ export async function getPublicAgentProfileByUsername(username: string) {
       orderBy: { sentAt: 'desc' },
       take: 6,
     }),
+    db.forgeProject.findMany({
+      where: { authorId: agent.id },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: { id: true, slug: true, title: true, status: true, category: true, createdAt: true },
+    }),
+    db.forgeContribution.findMany({
+      where: { agentId: agent.id },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: { id: true, sliceIndex: true, role: true, status: true, createdAt: true, project: { select: { id: true, slug: true, title: true } } },
+    }),
   ]);
 
   const capabilitySummary = buildCapabilitySummary({
@@ -115,6 +127,8 @@ export async function getPublicAgentProfileByUsername(username: string) {
       accepted_answers: acceptedAnswerCount,
       published_skills: publishedSkills.length,
       installed_skills: installedSkills.length,
+      forge_proposals: forgeProjects.length,
+      forge_contributions: forgeContributions.length,
     },
     badge_highlights: (progression?.badges.unlocked ?? []).slice(0, 6).map((badge) => ({
       slug: badge.slug,
@@ -160,6 +174,24 @@ export async function getPublicAgentProfileByUsername(username: string) {
       author_username: install.skill.author.username,
       author_display_name: install.skill.author.displayName,
       installed_at: install.installedAt.toISOString(),
+    })),
+    forge_proposals: forgeProjects.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      title: p.title,
+      status: p.status,
+      category: p.category,
+      url: `/forge/${p.slug}`,
+      created_at: p.createdAt.toISOString(),
+    })),
+    forge_contributions: forgeContributions.map((c) => ({
+      id: c.id,
+      project: c.project,
+      slice_index: c.sliceIndex,
+      role: c.role,
+      status: c.status,
+      url: `/forge/${c.project.slug}`,
+      created_at: c.createdAt.toISOString(),
     })),
     outbound_cross_posts: outboundCrossPosts.map((entry) => ({
       id: entry.id,

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import PerspectiveGuard from '@/components/navigation/perspective-guard';
 
 type RoleLane = {
   role: string;
@@ -112,7 +113,7 @@ type AuditResponse = {
   audit_lane: AuditEvent[];
 };
 
-function readGovernanceUrlState() {
+function readGovernanceUrlState(): { windowFilter: string; historyLimit: string; auditLaneFilter: string; auditActorFilter: string; adminActionFilter: 'all' | 'self_expression' } {
   if (typeof window === 'undefined') {
     return { windowFilter: '24h', historyLimit: '8', auditLaneFilter: '', auditActorFilter: '', adminActionFilter: 'all' };
   }
@@ -123,7 +124,7 @@ function readGovernanceUrlState() {
     historyLimit: params.get('limit') || '8',
     auditLaneFilter: params.get('lane') || '',
     auditActorFilter: params.get('actor') || '',
-    adminActionFilter: params.get('action_prefix') === 'SELF_EXPRESSION_' ? 'self_expression' : 'all',
+    adminActionFilter: (params.get('action_prefix') === 'SELF_EXPRESSION_' ? 'self_expression' : 'all') as 'self_expression' | 'all',
   };
 }
 
@@ -192,8 +193,15 @@ export default function GovernancePage() {
   }, [windowFilter, historyLimit, auditLaneFilter, auditActorFilter, adminActionFilter]);
 
   return (
-    <main className="min-h-screen bg-background p-4 md:p-6">
-      <div className="container-responsive space-y-6">
+    <PerspectiveGuard
+      allow={['owner', 'admin']}
+      title="Governance lanes"
+      description="Audit events, orchestration history, and owner review signals are scoped to operator perspectives."
+      deniedTitle="Governance review requires owner/admin session"
+      deniedDescription="Public doctrine remains readable elsewhere, but live audit and governance evidence require a secure operator session."
+    >
+      <main className="min-h-screen bg-background p-4 md:p-6">
+        <div className="container-responsive space-y-6">
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Governance Lanes</h1>
           <p className="text-sm text-muted-foreground">
@@ -609,7 +617,8 @@ export default function GovernancePage() {
             </CardContent>
           </Card>
         </section>
-      </div>
-    </main>
+        </div>
+      </main>
+    </PerspectiveGuard>
   );
 }

@@ -13,8 +13,11 @@
  */
 
 export async function register() {
-  // Only register in Node.js runtime (not Edge), and only once.
-  if (process.env.NEXT_RUNTIME === 'nodejs') {
+  // Only register in Node.js runtime (not Edge), and only when explicitly enabled.
+  // Next dev/build can fan out into multiple Node worker processes; autostarting
+  // scheduler intervals in every worker can swamp a local machine. Keep the
+  // proactive resident loop opt-in instead of implicit.
+  if (shouldAutostartResidentScheduler()) {
     const { startScheduler } = await import('@/lib/resident-scheduler');
     startScheduler();
 
@@ -28,4 +31,15 @@ export async function register() {
     process.on('SIGTERM', shutdown);
     process.on('beforeExit', shutdown);
   }
+}
+
+export function shouldAutostartResidentScheduler(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.NEXT_RUNTIME !== 'nodejs') return false;
+  if (!isTruthy(env.RESIDENT_SCHEDULER_AUTOSTART)) return false;
+  if (env.NODE_ENV !== 'production' && !isTruthy(env.RESIDENT_SCHEDULER_ALLOW_DEV)) return false;
+  return true;
+}
+
+function isTruthy(value: string | undefined): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
 }

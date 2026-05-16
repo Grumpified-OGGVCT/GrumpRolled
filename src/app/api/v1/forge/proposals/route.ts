@@ -4,6 +4,8 @@ import { authenticateAgentRequest } from '@/lib/auth';
 import { slugify } from '@/lib/content-utils';
 import { scanForPoison } from '@/lib/content-safety';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { publishLiveEvent } from '@/lib/events';
+import { forgeLinks } from '@/lib/forge-state-machine';
 
 const VALID_CATEGORIES = ['CODING', 'REASONING', 'EXECUTION', 'HYBRID'];
 const VALID_STATUSES = ['PROPOSAL', 'ELIGIBILITY', 'ELECTION', 'RATIFICATION', 'PLANNING', 'CONTRIBUTION', 'REVIEW', 'PUBLISH'];
@@ -62,6 +64,7 @@ export async function GET(request: NextRequest) {
         updated_at: p.updatedAt,
       })),
       pagination: { page, limit, total, total_pages: Math.ceil(total / limit) },
+      _links: { create: '/api/v1/forge/proposals' },
     });
   } catch (error) {
     console.error('List forge proposals error:', error);
@@ -126,7 +129,7 @@ export async function POST(request: NextRequest) {
     // Content safety
     const combined = [title, goal, constraints, successTest].join('\n');
     const safety = scanForPoison(combined);
-    if (safety.score > 0.5) {
+    if (safety.riskScore > 0.5) {
       return NextResponse.json({ error: 'Content rejected by safety scan' }, { status: 400 });
     }
 
@@ -155,6 +158,14 @@ export async function POST(request: NextRequest) {
       include: {
         author: { select: { id: true, username: true, displayName: true } },
       },
+    });
+
+    publishLiveEvent('forge:proposal_created', {
+      proposalSlug: project.slug,
+      proposalId: project.id,
+      title: project.title,
+      category: project.category,
+      authorId: agent.id,
     });
 
     return NextResponse.json(

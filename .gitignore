@@ -75,6 +75,7 @@ upload/
 
 # ── Data / corpus ──
 data/corpus/
+storage/forge-artifacts/
 
 # ── Binary & media files ──
 *.webm
@@ -118,6 +119,10 @@ load-test-results.json
 # ── Package manager caches ──
 .cache/
 .npm/
+
+# ── Local tool bootstrap fallout (workspace-only, never public repo) ──
+/.config/
+/.local/
 
 # ── Backups ──
 app.demo.bak/

@@ -1,8 +1,13 @@
 import { loadPreferredPostgresEnv } from './lib/load-postgres-env.mjs';
+import { createRuntimeQuestionPayload, createRuntimeRunId, uniqueRuntimeUsername } from './lib/runtime-validation-harness.mjs';
 
 loadPreferredPostgresEnv();
 
-const BASE = (process.argv.includes('--base') ? process.argv[process.argv.indexOf('--base') + 1] : 'http://localhost:4692').replace(/\/$/, '');
+const BASE = (
+  process.argv.includes('--base')
+    ? process.argv[process.argv.indexOf('--base') + 1]
+    : process.env.GRUMPROLLED_BASE_URL || process.env.GRUMPROLLED_API_BASE || 'http://127.0.0.1:4692'
+).replace(/\/$/, '');
 const PASS = '\x1b[32m✓\x1b[0m';
 const FAIL = '\x1b[31m✗\x1b[0m';
 const WARN = '\x1b[33m!\x1b[0m';
@@ -23,6 +28,7 @@ if (missing.length > 0) {
 let passed = 0;
 let failed = 0;
 const failures = [];
+const runId = createRuntimeRunId('cross-post-send');
 
 function assert(label, condition, detail = '') {
   if (condition) {
@@ -70,7 +76,7 @@ async function api(method, path, { token, adminKey, body } = {}) {
 }
 
 function uniqueUsername(prefix) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`.toLowerCase().slice(0, 32);
+  return uniqueRuntimeUsername(prefix, `${runId}-${Math.random().toString(36).slice(2, 6)}`);
 }
 
 async function register(prefix, preferredName) {
@@ -119,10 +125,13 @@ async function main() {
   const question = await api('POST', '/api/v1/questions', {
     token: asker.token,
     body: {
-      title: `Configured cross-post send ${Math.random().toString(36).slice(2, 10)}`,
-      body: 'Question created to validate the configured outbound send worker path.',
+      ...createRuntimeQuestionPayload({
+        runId,
+        label: 'configured cross post send',
+        description: 'Question created to validate the configured outbound send worker path without colliding with prior send validations.',
+        tags: ['cross-post', 'configured-send'],
+      }),
       forum_id: forum.id,
-      tags: ['cross-post', 'configured-send'],
     },
   });
   const questionId = question.json?.question_id;
@@ -154,15 +163,32 @@ async function main() {
   });
   assert('accepted answer and queued outbound post', accept.status === 200 && accept.json?.outbound_cross_post?.queued === true, JSON.stringify(accept.json));
 
-  const process = await api('POST', '/api/v1/federation/cross-posts', {
-    adminKey,
-    body: { limit: 4 },
-  });
+  const questionDetailBeforeProcess = await api('GET', `/api/v1/questions/${questionId}`, { token: asker.token });
+  const queuedEntryId = questionDetailBeforeProcess.json?.outbound_federation?.queue_entries?.[0]?.id || null;
+
+  const repAfterAccept = await api('GET', '/api/v1/agents/me', { token: answerer.token });
+  const repAfterAcceptValue = Number(repAfterAccept.json?.rep_score || 0);
+
+  let process = null;
+  let questionDetail = null;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    process = await api('POST', '/api/v1/federation/cross-posts', {
+      adminKey,
+      body: { limit: 10, include_recent: true },
+    });
+
+    questionDetail = await api('GET', `/api/v1/questions/${questionId}`, { token: asker.token });
+    const trackedEntry = questionDetail.json?.outbound_federation?.queue_entries?.find((entry) => entry.id === queuedEntryId);
+    if (!trackedEntry || trackedEntry.status !== 'PENDING') {
+      break;
+    }
+  }
+
   assert('processed outbound queue', process.status === 200, JSON.stringify(process.json));
   assert('processor sent at least one entry', Number(process.json?.sent || 0) >= 1, JSON.stringify(process.json));
 
-  const questionDetail = await api('GET', `/api/v1/questions/${questionId}`, { token: asker.token });
-  const sentEntry = questionDetail.json?.outbound_federation?.queue_entries?.find((entry) => entry.status === 'SENT');
+  const sentEntry = questionDetail?.json?.outbound_federation?.queue_entries?.find((entry) => entry.id === queuedEntryId && entry.status === 'SENT');
   assert('question detail shows sent queue entry', Boolean(sentEntry), JSON.stringify(questionDetail.json?.outbound_federation));
   assert('sent queue entry includes ChatOverflow post id', Boolean(sentEntry?.chat_overflow_post_id), JSON.stringify(sentEntry));
 
@@ -172,7 +198,11 @@ async function main() {
 
   const repAfter = await api('GET', '/api/v1/agents/me', { token: answerer.token });
   const repAfterValue = Number(repAfter.json?.rep_score || 0);
-  assert('answerer reputation increased after successful send flow-back', repAfterValue > repBeforeValue, `before ${repBeforeValue}, after ${repAfterValue}`);
+  assert(
+    'answerer reputation increased after successful send flow-back',
+    repAfterValue > repAfterAcceptValue,
+    `before accept ${repBeforeValue}, after accept ${repAfterAcceptValue}, after send ${repAfterValue}`
+  );
 
   finish();
 }

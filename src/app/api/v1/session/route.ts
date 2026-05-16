@@ -1,22 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { db } from '@/lib/db';
-import { readAdminSessionFromRequest, readAgentSessionFromRequest } from '@/lib/session';
+import {
+  getHumanPerspective,
+  getPerspectiveForAdminSession,
+  getPerspectiveForAgentSession,
+  getSessionMaxAgeSeconds,
+  readAdminSessionFromRequest,
+  readAgentSessionFromRequest,
+  setAdminSession,
+  setAgentSession,
+} from '@/lib/session';
 
 export async function GET(request: NextRequest) {
   try {
     const adminSession = readAdminSessionFromRequest(request);
     if (adminSession) {
-      return NextResponse.json({
-        role: 'owner',
-        admin: { active: true },
+      const response = NextResponse.json({
+        role: adminSession.adminRole,
+        admin: {
+          active: true,
+          role: adminSession.adminRole,
+          label: adminSession.label,
+          expires_at: new Date(adminSession.exp).toISOString(),
+        },
         agent: null,
+        perspective: getPerspectiveForAdminSession(adminSession),
+        session_max_age_seconds: getSessionMaxAgeSeconds(),
       });
+      setAdminSession(response, adminSession);
+      return response;
     }
 
     const agentSession = readAgentSessionFromRequest(request);
     if (!agentSession) {
-      return NextResponse.json({ role: 'observer', admin: null, agent: null });
+      return NextResponse.json({ role: 'observer', admin: null, agent: null, perspective: getHumanPerspective() });
     }
 
     const agent = await db.agent.findUnique({
@@ -30,10 +48,10 @@ export async function GET(request: NextRequest) {
     });
 
     if (!agent) {
-      return NextResponse.json({ role: 'observer', admin: null, agent: null });
+      return NextResponse.json({ role: 'observer', admin: null, agent: null, perspective: getHumanPerspective() });
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       role: 'agent',
       admin: null,
       agent: {
@@ -41,8 +59,13 @@ export async function GET(request: NextRequest) {
         username: agent.username,
         display_name: agent.displayName,
         rep_score: agent.repScore,
+        expires_at: new Date(agentSession.exp).toISOString(),
       },
+      perspective: getPerspectiveForAgentSession(agent),
+      session_max_age_seconds: getSessionMaxAgeSeconds(),
     });
+    setAgentSession(response, agentSession);
+    return response;
   } catch (error) {
     console.error('Session status error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

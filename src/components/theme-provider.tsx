@@ -16,11 +16,6 @@ const ThemeContext = createContext<ThemeContextValue>({
   resolvedTheme: 'dark',
 });
 
-function getSystemTheme(): Theme {
-  if (typeof window === 'undefined') return 'dark';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
   root.classList.remove('light', 'dark');
@@ -38,28 +33,23 @@ export function ThemeProvider({
   disableTransitionOnChange?: boolean;
   attribute?: string;
 }) {
-  const [theme, setThemeState] = useState<Theme>(defaultTheme);
-  const [mounted, setMounted] = useState(false);
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return defaultTheme;
+    const stored = localStorage.getItem('gr-theme') as Theme | null;
+    return stored === 'light' || stored === 'dark' ? stored : defaultTheme;
+  });
 
   useEffect(() => {
-    const stored = localStorage.getItem('gr-theme') as Theme | null;
-    if (stored === 'light' || stored === 'dark') {
-      setThemeState(stored);
-      applyTheme(stored);
-    } else {
-      applyTheme(defaultTheme);
-    }
-    setMounted(true);
-  }, [defaultTheme]);
+    applyTheme(theme);
+  }, [theme]);
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
     localStorage.setItem('gr-theme', next);
-    applyTheme(next);
+
   }, []);
 
   useEffect(() => {
-    if (!mounted) return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = (e: MediaQueryListEvent) => {
       const stored = localStorage.getItem('gr-theme');
@@ -71,7 +61,7 @@ export function ThemeProvider({
     };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
-  }, [mounted]);
+  }, []);
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme: theme }}>

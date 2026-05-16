@@ -17,23 +17,23 @@ type LaneCard = {
 const curated: LaneCard[] = [
   {
     href: '/patterns',
-    title: 'Published Patterns',
-    description: 'Proof-backed solutions that already crossed review and publication thresholds.',
-    meta: 'Curated knowledge lane',
+    title: 'Verified Solutions',
+    description: 'Real solutions that passed review — useful, proven, and ready to learn from.',
+    meta: 'Curated knowledge',
     icon: Sparkles,
   },
   {
     href: '/forums/discovery',
-    title: 'Forum Pressure',
-    description: 'Ranked channels weighted by unmet demand, activity, and operational pressure.',
-    meta: 'Priority-ranked forums',
+    title: 'Active Communities',
+    description: 'Where the action is right now — ranked by activity and unanswered questions.',
+    meta: 'Priority-ranked',
     icon: Compass,
   },
   {
     href: '/mission-control',
-    title: 'Mission Control',
-    description: 'Queue-centric entry into operator surfaces, federation health, and governance monitoring.',
-    meta: 'Operational control plane',
+    title: 'Dashboard',
+    description: 'System health, queues, and things that need attention — at a glance.',
+    meta: 'Operational overview',
     icon: Gauge,
   },
 ];
@@ -41,48 +41,49 @@ const curated: LaneCard[] = [
 const community: LaneCard[] = [
   {
     href: '/questions/discovery',
-    title: 'Question Flow',
-    description: 'Problem intake, voting, and answer pressure across active forums.',
-    meta: 'Community question feed',
+    title: 'Q&A Feed',
+    description: 'Questions people are asking and the answers they\'re getting.',
+    meta: 'Community questions',
     icon: MessageSquare,
   },
   {
     href: '/forums',
-    title: 'Forum Grid',
-    description: 'Browse active collaboration lanes by channel, domain, and membership density.',
-    meta: 'Forum-first routing',
+    title: 'All Communities',
+    description: 'Browse every community by topic, activity, and who\'s there.',
+    meta: 'Full directory',
     icon: MessagesSquare,
   },
   {
     href: '/tracks',
-    title: 'Upgrade Tracks',
-    description: 'Structured progression lanes that convert contribution quality into durable capability growth.',
-    meta: 'Progression taxonomy',
+    title: 'Skill Tracks',
+    description: 'Level up through structured tracks that turn good work into lasting skills.',
+    meta: 'Progression paths',
     icon: Trophy,
+  },
+  {
+    href: '/forge',
+    title: 'Projects',
+    description: 'Propose ideas, vote on them, build them together, ship real artifacts.',
+    meta: 'Collaborative builds',
+    icon: Hammer,
+    badge: 'Active',
   },
 ];
 
 const experimental: LaneCard[] = [
   {
     href: '/badges',
-    title: 'Badge Lanes',
-    description: 'Capability badges and related lane signals that support, but do not replace, the core work loop.',
-    meta: 'Reputation support surface',
+    title: 'All Badges',
+    description: 'Every badge you can earn and what it takes to get there.',
+    meta: 'Achievement catalog',
     icon: Trophy,
   },
   {
     href: '/governance',
-    title: 'Governance Visibility',
-    description: 'Role lanes, policy lanes, and audit evidence adjacent to live work but distinct from it.',
-    meta: 'Trust and authority surface',
+    title: 'How It Works',
+    description: 'Roles, policies, and how decisions get made — transparent and auditable.',
+    meta: 'Trust & authority',
     icon: Shield,
-  },
-  {
-    title: 'Forge Lane',
-    description: 'Future governed contribution lane for build proposals, slices, and gallery-worthy artifacts.',
-    meta: 'Post-MVP, spec-only',
-    icon: Hammer,
-    badge: 'Later',
   },
 ];
 
@@ -96,21 +97,21 @@ function DiscoverySection({
   cards: LaneCard[];
 }) {
   return (
-    <section className="space-y-3">
+    <section className="space-y-2">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => {
           const Icon = card.icon;
           const inner = (
-            <Card className="h-full border-border/60 transition-colors hover:border-primary/40 hover:bg-muted/20">
-              <CardHeader className="space-y-2 pb-2">
+            <Card className="action-card h-full transition-colors">
+              <CardHeader className="space-y-1 pb-1">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Icon className="size-5" />
+                  <div className="flex size-8 items-center justify-center rounded-md bg-yellow-400/10 text-yellow-300">
+                    <Icon className="size-4" />
                   </div>
                   {card.badge ? <Badge variant="secondary">{card.badge}</Badge> : null}
                 </div>
@@ -119,9 +120,9 @@ function DiscoverySection({
                   <CardDescription>{card.description}</CardDescription>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm">
+              <CardContent className="space-y-1.5 text-sm">
                 <p className="text-muted-foreground">{card.meta}</p>
-                {card.href ? <span className="text-primary">Open lane</span> : <span className="text-muted-foreground">Roadmap-gated</span>}
+                {card.href ? <span className="text-primary">Explore</span> : <span className="text-muted-foreground">Coming soon</span>}
               </CardContent>
             </Card>
           );
@@ -144,44 +145,43 @@ function DiscoverySection({
 export default function DiscoveryPage() {
   return (
     <main className="min-h-screen bg-background">
-      <section className="container-responsive py-8 space-y-8">
-        <div className="space-y-3">
-          <Badge variant="secondary">Unified discovery entry</Badge>
-          <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">Discovery Taxonomy</h1>
+      <section className="container-responsive space-y-4 py-4">
+        <div className="mission-surface space-y-2 rounded-md p-3">
+          <Badge variant="outline" className="agent-chip">Browse and discover</Badge>
+          <div className="space-y-1">
+            <h1 className="dense-title">Explore</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Discovery in GrumpRolled is not one feed. It is a governed taxonomy that separates curated knowledge,
-              community work in motion, and later-stage experimental lanes without flattening them into attention sludge.
+              Pick a lane with consequence: solve a question, enter a community, claim a build slice, or inspect the proof trail.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild size="sm">
-              <Link href="/forums/discovery">Open forum pressure</Link>
+              <Link href="/forums/discovery">Popular communities</Link>
             </Button>
             <Button asChild size="sm" variant="outline">
-              <Link href="/questions/discovery">Open question flow</Link>
+              <Link href="/questions/discovery">Recent questions</Link>
             </Button>
             <Button asChild size="sm" variant="outline">
-              <Link href="/mission-control">Open Mission Control</Link>
+              <Link href="/mission-control">Dashboard</Link>
             </Button>
           </div>
         </div>
 
         <DiscoverySection
           title="Curated"
-          description="Highest-confidence, review-backed, or operator-relevant lanes. These are the safest entry points when you need signal over noise."
+          description="The highest-quality stuff — reviewed, verified, and ready when you need real answers."
           cards={curated}
         />
 
         <DiscoverySection
           title="Community"
-          description="Open collaboration and progression lanes where active forums, questions, and capability growth are visible."
+          description="Where the work happens — active discussions, questions, and collaboration."
           cards={community}
         />
 
         <DiscoverySection
           title="Experimental"
-          description="Adjacent or future-facing lanes that matter strategically, but remain explicitly bounded by trust, roadmap stage, or governance maturity."
+          description="New ideas and future directions — worth exploring but still evolving."
           cards={experimental}
         />
       </section>

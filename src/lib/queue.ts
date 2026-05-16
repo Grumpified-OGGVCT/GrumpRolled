@@ -37,6 +37,11 @@ export interface FederationProcessJob {
   crossPostId: string;
 }
 
+export interface ForgeElectionCloseJob {
+  projectId: string;
+  slug: string;
+}
+
 // ============================================================================
 // Queue instances (lazy-initialized)
 // ============================================================================
@@ -45,6 +50,7 @@ let reputationQueue: Queue<ReputationReconcileJob> | null = null;
 let progressionQueue: Queue<ProgressionSyncJob> | null = null;
 let embeddingQueue: Queue<EmbeddingGenerateJob> | null = null;
 let federationQueue: Queue<FederationProcessJob> | null = null;
+let forgeElectionCloseQueue: Queue<ForgeElectionCloseJob> | null = null;
 
 function getReputationQueue(): Queue<ReputationReconcileJob> {
   if (!reputationQueue) {
@@ -84,6 +90,16 @@ function getFederationQueue(): Queue<FederationProcessJob> {
     });
   }
   return federationQueue;
+}
+
+function getForgeElectionCloseQueue(): Queue<ForgeElectionCloseJob> {
+  if (!forgeElectionCloseQueue) {
+    forgeElectionCloseQueue = new Queue<ForgeElectionCloseJob>('forge-election-close', {
+      connection: getConnection(),
+      defaultJobOptions: { removeOnComplete: 50, removeOnFail: 100, attempts: 1 },
+    });
+  }
+  return forgeElectionCloseQueue;
 }
 
 // ============================================================================
@@ -131,6 +147,32 @@ export async function enqueueFederationProcess(crossPostId: string): Promise<voi
   await getFederationQueue().add('process', { crossPostId });
 }
 
+export async function enqueueForgeElectionClose(projectId: string, slug: string, endAt: Date): Promise<void> {
+  const delayMs = endAt.getTime() - Date.now();
+  if (delayMs <= 0) return; // Already past end time
+
+  try {
+    await getForgeElectionCloseQueue().add(
+      'close-election',
+      { projectId, slug },
+      { delay: delayMs, jobId: `forge-election-${projectId}` }
+    );
+  } catch {
+    // Redis < 5 or unavailable — elections will need manual closing
+  }
+}
+
+export async function cancelForgeElectionClose(projectId: string): Promise<void> {
+  try {
+    const job = await getForgeElectionCloseQueue().getJob(`forge-election-${projectId}`);
+    if (job) {
+      await job.remove();
+    }
+  } catch {
+    // Job not found or Redis unavailable — safe to ignore
+  }
+}
+
 // ============================================================================
 // Worker registration (used by scripts/worker.ts)
 // ============================================================================
@@ -140,6 +182,7 @@ export interface WorkerRegistry {
   progression: (job: { data: ProgressionSyncJob }) => Promise<void>;
   embedding: (job: { data: EmbeddingGenerateJob }) => Promise<void>;
   federation: (job: { data: FederationProcessJob }) => Promise<void>;
+  forgeElectionClose: (job: { data: ForgeElectionCloseJob }) => Promise<void>;
 }
 
 export function createWorkers(handlers: WorkerRegistry): Worker[] {
@@ -158,6 +201,10 @@ export function createWorkers(handlers: WorkerRegistry): Worker[] {
 
     new Worker<FederationProcessJob>('federation-process', async (job) => {
       await handlers.federation(job);
+    }, { connection: getConnection(), concurrency: 2 }),
+
+    new Worker<ForgeElectionCloseJob>('forge-election-close', async (job) => {
+      await handlers.forgeElectionClose(job);
     }, { connection: getConnection(), concurrency: 2 }),
   ];
 }

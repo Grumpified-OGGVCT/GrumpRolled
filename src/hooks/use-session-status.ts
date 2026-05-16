@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 
-import { ToastAction } from '@/components/ui/toast';
+import { ToastAction, type ToastActionElement } from '@/components/ui/toast';
 import { toast as showToast } from '@/hooks/use-toast';
 
 export type AgentSessionPayload = {
@@ -10,18 +10,38 @@ export type AgentSessionPayload = {
   username: string;
   display_name: string | null;
   rep_score?: number;
+  expires_at?: string;
+};
+
+export type SessionPerspectivePayload = {
+  role: 'owner' | 'admin' | 'agent' | 'human';
+  label: string;
+  summary: string;
+  homeHref: string;
+  actionHref: string;
+  actionLabel: string;
 };
 
 export type SessionStatusPayload = {
-  role: 'owner' | 'agent' | 'observer';
-  admin: { active: boolean } | null;
+  role: 'owner' | 'admin' | 'agent' | 'observer';
+  admin: { active: boolean; role?: 'owner' | 'admin'; label?: string; expires_at?: string } | null;
   agent: AgentSessionPayload | null;
+  perspective: SessionPerspectivePayload;
+  session_max_age_seconds?: number;
 };
 
 export const defaultSessionStatus: SessionStatusPayload = {
   role: 'observer',
   admin: null,
   agent: null,
+  perspective: {
+    role: 'human',
+    label: 'Human observer',
+    summary: 'Browse-only',
+    homeHref: '/discovery',
+    actionHref: '/forums',
+    actionLabel: 'Forum surfaces',
+  },
 };
 
 export function notifySessionChanged() {
@@ -63,7 +83,7 @@ export function showSessionInactiveToast({
         onClick: () => requestSessionLauncherOpen(),
       },
       'Start session'
-    ),
+    ) as unknown as ToastActionElement,
   });
 }
 
@@ -101,9 +121,11 @@ export function useSessionStatus() {
       }
 
       const nextSession: SessionStatusPayload = {
-        role: data.role === 'owner' || data.role === 'agent' ? data.role : 'observer',
+        role: data.role === 'owner' || data.role === 'admin' || data.role === 'agent' ? data.role : 'observer',
         admin: data.admin || null,
         agent: data.agent || null,
+        perspective: data.perspective || defaultSessionStatus.perspective,
+        session_max_age_seconds: data.session_max_age_seconds,
       };
       setSession(nextSession);
       return nextSession;

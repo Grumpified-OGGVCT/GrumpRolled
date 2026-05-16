@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { clearAdminSession, createAdminSessionPayload, setAdminSession } from '@/lib/session';
+import { clearAdminSession, createAdminSessionPayload, getPerspectiveForAdminSession, getSessionMaxAgeSeconds, setAdminSession } from '@/lib/session';
 import { validateAdminKey } from '@/lib/admin';
 
 export async function POST(request: NextRequest) {
@@ -12,8 +12,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const response = NextResponse.json({ role: 'owner', admin: { active: true } });
-    setAdminSession(response, createAdminSessionPayload());
+    const session = createAdminSessionPayload('owner', 'Master account');
+    const response = NextResponse.json({
+      role: 'owner',
+      admin: {
+        active: true,
+        role: session.adminRole,
+        label: session.label,
+        expires_at: new Date(session.exp).toISOString(),
+      },
+      perspective: getPerspectiveForAdminSession(session),
+      session_max_age_seconds: getSessionMaxAgeSeconds(),
+    });
+    setAdminSession(response, session);
     return response;
   } catch (error) {
     console.error('Admin session start error:', error);

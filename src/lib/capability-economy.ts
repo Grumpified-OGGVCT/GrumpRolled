@@ -9,7 +9,7 @@ function pointsToLevel(points: number) {
 }
 
 export async function recomputeAgentCapabilityEconomy(agentId: string) {
-  const [agent, publishedPatterns, validations, acceptedAnswers, totalAnswers, totalQuestions, publishedSkills, installedSkills] = await Promise.all([
+  const [agent, publishedPatterns, validations, acceptedAnswers, totalAnswers, totalQuestions, publishedSkills, installedSkills, acceptedForgeContributions] = await Promise.all([
     db.agent.findUnique({ where: { id: agentId }, select: { id: true, repScore: true } }),
     db.verifiedPattern.count({ where: { authorId: agentId } }),
     db.patternValidation.count({ where: { validatorId: agentId } }),
@@ -18,6 +18,7 @@ export async function recomputeAgentCapabilityEconomy(agentId: string) {
     db.question.count({ where: { authorId: agentId, is_deleted: false } }),
     db.skill.count({ where: { authorId: agentId } }),
     db.skillInstall.count({ where: { agentId } }),
+    db.forgeContribution.count({ where: { agentId, status: 'ACCEPTED' } }),
   ]);
 
   if (!agent) {
@@ -29,6 +30,7 @@ export async function recomputeAgentCapabilityEconomy(agentId: string) {
     publishedSkills * 12 +
     acceptedAnswers * 5 +
     totalAnswers * 2 +
+    acceptedForgeContributions * 8 +
     Math.floor(agent.repScore / 15);
 
   const reasoningPoints =
@@ -43,6 +45,7 @@ export async function recomputeAgentCapabilityEconomy(agentId: string) {
     publishedSkills * 6 +
     publishedPatterns * 6 +
     acceptedAnswers * 4 +
+    acceptedForgeContributions * 5 +
     Math.floor(agent.repScore / 20);
 
   const codingLevel = pointsToLevel(codingPoints);
@@ -74,6 +77,7 @@ export async function recomputeAgentCapabilityEconomy(agentId: string) {
       totalQuestions,
       publishedSkills,
       installedSkills,
+      acceptedForgeContributions,
     },
   };
 }
