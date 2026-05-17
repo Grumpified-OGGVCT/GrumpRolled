@@ -5,7 +5,23 @@
  * and register all agents with TTS capabilities.
  */
 
+import { db } from '@/lib/db';
 import { MasterAgentCoordinator, checkMasterAgentTTSAccess } from './tts-coordinator';
+
+export const DEFAULT_MASTER_AGENT_BASE_URL =
+  process.env.GRUMPROLLED_BASE_URL ||
+  process.env.GRUMPROLLED_API_BASE ||
+  'http://127.0.0.1:4692';
+
+export const DEFAULT_MASTER_AGENT_IDS = [
+  'agent-grump-main',
+  'agent-search-01',
+  'agent-analysis-01',
+  'agent-validator-01',
+  'agent-reputation-01',
+  'agent-knowledge-keeper',
+  'agent-moderator',
+] as const;
 
 let masterCoordinator: MasterAgentCoordinator | null = null;
 let healthMonitoringInterval: NodeJS.Timeout | null = null;
@@ -14,7 +30,10 @@ let healthMonitoringInterval: NodeJS.Timeout | null = null;
  * Initialize the master agent coordinator
  * Call this once on application startup
  */
-export async function initializeMasterAgent(baseUrl = 'http://localhost:4692') {
+export async function initializeMasterAgent(
+  baseUrl = DEFAULT_MASTER_AGENT_BASE_URL,
+  agentIds?: string[],
+) {
   console.log('[Master Agent] Initializing...');
 
   // Check TTS system accessibility
@@ -27,16 +46,7 @@ export async function initializeMasterAgent(baseUrl = 'http://localhost:4692') {
   // Initialize master coordinator
   masterCoordinator = new MasterAgentCoordinator(baseUrl);
 
-  // Register built-in agents
-  const agents = [
-    'agent-grump-main',
-    'agent-search-01',
-    'agent-analysis-01',
-    'agent-validator-01',
-    'agent-reputation-01',
-    'agent-knowledge-keeper',
-    'agent-moderator',
-  ];
+  const agents = agentIds || await resolveMasterAgentIds();
 
   agents.forEach((agentId) => {
     masterCoordinator!.registerAgent(agentId);
@@ -179,22 +189,10 @@ export function setupShutdownHook() {
 export async function handleMasterAgentInit(request: {
   baseUrl?: string;
 }) {
-  const baseUrl = request.baseUrl || 'http://localhost:4692';
+  const baseUrl = request.baseUrl || DEFAULT_MASTER_AGENT_BASE_URL;
+  const agents = await resolveMasterAgentIds();
 
-  const master = await initializeMasterAgent(baseUrl);
-  const agents = Array.from(
-    { length: 7 },
-    (_, i) =>
-      [
-        'agent-grump-main',
-        'agent-search-01',
-        'agent-analysis-01',
-        'agent-validator-01',
-        'agent-reputation-01',
-        'agent-knowledge-keeper',
-        'agent-moderator',
-      ][i]
-  );
+  await initializeMasterAgent(baseUrl, agents);
 
   return {
     success: true,
@@ -214,16 +212,7 @@ export async function handleMasterAgentStatus() {
   const master = getMasterCoordinator();
 
   try {
-    // TODO: Get registered agents from postgres
-    const agents = [
-      'agent-grump-main',
-      'agent-search-01',
-      'agent-analysis-01',
-      'agent-validator-01',
-      'agent-reputation-01',
-      'agent-knowledge-keeper',
-      'agent-moderator',
-    ];
+    const agents = await resolveMasterAgentIds();
 
     const health = await master.monitorProvidersAndFailover();
 
@@ -240,6 +229,25 @@ export async function handleMasterAgentStatus() {
       success: false,
       error: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+export async function getRegisteredAgentsFromPostgres(): Promise<string[]> {
+  const agents = await db.agent.findMany({
+    orderBy: { createdAt: 'asc' },
+    select: { username: true },
+  });
+
+  return [...new Set(agents.map((agent) => agent.username.trim()).filter(Boolean))];
+}
+
+export async function resolveMasterAgentIds(): Promise<string[]> {
+  try {
+    const agents = await getRegisteredAgentsFromPostgres();
+    return agents.length > 0 ? agents : [...DEFAULT_MASTER_AGENT_IDS];
+  } catch (error) {
+    console.warn('[Master Agent] Falling back to built-in agent ids:', error);
+    return [...DEFAULT_MASTER_AGENT_IDS];
   }
 }
 

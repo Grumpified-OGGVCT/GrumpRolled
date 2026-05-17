@@ -13,6 +13,17 @@
 
 import axios from 'axios';
 
+import {
+  listCoordinationMessages,
+  markCoordinationMessageProcessed,
+  submitCoordinationMessage,
+} from '@/lib/ops-coordination';
+
+export const DEFAULT_AGENT_TTS_BASE_URL =
+  process.env.GRUMPROLLED_BASE_URL ||
+  process.env.GRUMPROLLED_API_BASE ||
+  'http://127.0.0.1:4692';
+
 export interface AgentTTSSynthesisRequest {
   text: string;
   voice?: string;
@@ -32,12 +43,14 @@ export interface AgentTTSResponse {
 }
 
 export interface AgentCoordinationMessage {
+  id?: string;
   fromAgent: string;
   toAgents?: string[]; // If null, broadcast to all
   action: 'synthesize' | 'share' | 'coordinate' | 'health-check';
   payload: Record<string, any>;
   timestamp: string;
   idempotencyKey: string; // Prevent duplicate processing
+  processedAt?: string | null;
 }
 
 /**
@@ -47,9 +60,8 @@ export interface AgentCoordinationMessage {
 export class AgentTTSCoordinator {
   private agentId: string;
   private baseUrl: string;
-  private coordinationQueue: AgentCoordinationMessage[] = [];
 
-  constructor(agentId: string, baseUrl = 'http://localhost:4692') {
+  constructor(agentId: string, baseUrl = DEFAULT_AGENT_TTS_BASE_URL) {
     this.agentId = agentId;
     this.baseUrl = baseUrl;
   }
@@ -102,7 +114,7 @@ export class AgentTTSCoordinator {
       ...options,
     });
 
-    const message: AgentCoordinationMessage = {
+    return submitCoordinationMessage({
       fromAgent: this.agentId,
       toAgents: targetAgents,
       action: 'share',
@@ -114,10 +126,7 @@ export class AgentTTSCoordinator {
       },
       timestamp: new Date().toISOString(),
       idempotencyKey: `${this.agentId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    };
-
-    this.coordinationQueue.push(message);
-    return message;
+    }).message;
   }
 
   /**
@@ -148,7 +157,7 @@ export class AgentTTSCoordinator {
     targetAgents: string[],
     payload: Record<string, any>
   ): Promise<AgentCoordinationMessage> {
-    const message: AgentCoordinationMessage = {
+    return submitCoordinationMessage({
       fromAgent: this.agentId,
       toAgents: targetAgents,
       action: 'coordinate',
@@ -158,24 +167,31 @@ export class AgentTTSCoordinator {
       },
       timestamp: new Date().toISOString(),
       idempotencyKey: `${this.agentId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    };
-
-    this.coordinationQueue.push(message);
-    return message;
+    }).message;
   }
 
   /**
    * Get pending coordination messages
    */
   getPendingMessages(): AgentCoordinationMessage[] {
-    return this.coordinationQueue;
+    return listCoordinationMessages({
+      agent: this.agentId,
+      includeSentByAgent: true,
+      limit: 200,
+    });
   }
 
   /**
    * Clear processed messages
    */
   clearProcessedMessages(count: number): void {
-    this.coordinationQueue = this.coordinationQueue.slice(count);
+    const messagesToMark = this.getPendingMessages().slice(0, Math.max(0, count));
+
+    messagesToMark.forEach((message) => {
+      if (message.id) {
+        markCoordinationMessageProcessed(message.id);
+      }
+    });
   }
 
   /**
@@ -197,7 +213,7 @@ export class MasterAgentCoordinator {
   private baseUrl: string;
   private coordinationLog: AgentCoordinationMessage[] = [];
 
-  constructor(baseUrl = 'http://localhost:4692') {
+  constructor(baseUrl = DEFAULT_AGENT_TTS_BASE_URL) {
     this.baseUrl = baseUrl;
   }
 
@@ -226,6 +242,7 @@ export class MasterAgentCoordinator {
     options?: Partial<Omit<AgentTTSSynthesisRequest, 'text'>>
   ): Promise<Map<string, AgentTTSResponse>> {
     const results = new Map<string, AgentTTSResponse>();
+    const targetAgents = Array.from(this.agents.keys());
 
     const promises = Array.from(this.agents.entries()).map(async ([agentId, coordinator]) => {
       try {
@@ -237,6 +254,21 @@ export class MasterAgentCoordinator {
     });
 
     await Promise.all(promises);
+
+    this.recordCoordinationEvent({
+      fromAgent: 'master-agent',
+      toAgents: targetAgents,
+      action: 'synthesize',
+      payload: {
+        textPreview: text.slice(0, 200),
+        requestedAgentCount: targetAgents.length,
+        successfulAgentCount: results.size,
+        options: options || {},
+      },
+      timestamp: new Date().toISOString(),
+      idempotencyKey: `master-synthesize-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    });
+
     return results;
   }
 
@@ -275,6 +307,22 @@ export class MasterAgentCoordinator {
       }
     }
 
+    const successfulAgents = Array.from(results.values()).filter((result) => result?.success).length;
+
+    this.recordCoordinationEvent({
+      fromAgent: 'master-agent',
+      toAgents: agentIds,
+      action: 'coordinate',
+      payload: {
+        contentPreview: content.slice(0, 200),
+        forumIds,
+        successfulAgentCount: successfulAgents,
+        requestedAgentCount: agentIds.length,
+      },
+      timestamp: new Date().toISOString(),
+      idempotencyKey: `master-coordinate-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    });
+
     return results;
   }
 
@@ -288,6 +336,16 @@ export class MasterAgentCoordinator {
       });
 
       const providers = response.data.providers;
+
+      this.recordCoordinationEvent({
+        fromAgent: 'master-agent',
+        action: 'health-check',
+        payload: {
+          providers,
+        },
+        timestamp: new Date().toISOString(),
+        idempotencyKey: `master-health-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      });
 
       // If critical provider fails, try to enable failover
       if (!providers.mimic3 && providers.coqui) {
@@ -310,6 +368,14 @@ export class MasterAgentCoordinator {
    */
   getCoordinationLog(limit = 100): AgentCoordinationMessage[] {
     return this.coordinationLog.slice(-limit);
+  }
+
+  private recordCoordinationEvent(message: AgentCoordinationMessage): void {
+    this.coordinationLog.push(message);
+
+    if (this.coordinationLog.length > 1000) {
+      this.coordinationLog = this.coordinationLog.slice(-1000);
+    }
   }
 
   /**
@@ -348,7 +414,7 @@ export class MasterAgentCoordinator {
 /**
  * Helper: Check if master coordin can reach TTS system
  */
-export async function checkMasterAgentTTSAccess(baseUrl = 'http://localhost:4692'): Promise<boolean> {
+export async function checkMasterAgentTTSAccess(baseUrl = DEFAULT_AGENT_TTS_BASE_URL): Promise<boolean> {
   try {
     const response = await axios.get(`${baseUrl}/api/v1/tts/health`, {
       timeout: 3000,
@@ -363,7 +429,7 @@ export async function checkMasterAgentTTSAccess(baseUrl = 'http://localhost:4692
  * Helper: List all agents and their capabilities
  */
 export async function listAgentCapabilities(
-  baseUrl = 'http://localhost:4692'
+  baseUrl = DEFAULT_AGENT_TTS_BASE_URL
 ): Promise<Record<string, any>> {
   try {
     const response = await axios.get(`${baseUrl}/api/v1/agents/search`, {

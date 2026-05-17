@@ -430,7 +430,13 @@ export function createAgentSelfAwareness(
     | 'agent-analysis-01'
     | 'agent-validator-01'
     | 'agent-reputation-01'
-    | string
+    | string,
+  overrides?: Partial<{
+    agentName: string;
+    role: string;
+    version: string;
+    ttsProviders: string[];
+  }>
 ): AgentSelfAwareness {
   const configs: Record<string, any> = {
     'agent-grump-main': {
@@ -470,12 +476,16 @@ export function createAgentSelfAwareness(
     },
   };
 
-  const config = configs[agentId] || {
+  const config = {
+    ...(configs[agentId] || {
     agentId,
     agentName: agentId.replace('agent-', ''),
     role: 'custom',
     version: '1.0.0',
     ttsProviders: ['coqui'],
+    }),
+    ...overrides,
+    agentId,
   };
 
   return new AgentSelfAwareness(config);

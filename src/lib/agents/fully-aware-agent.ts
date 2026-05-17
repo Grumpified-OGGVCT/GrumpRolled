@@ -12,7 +12,7 @@
 
 import { AgentSelfAwareness, createAgentSelfAwareness } from './self-awareness';
 import { SystemAwareness, createSystemAwareness } from './system-awareness';
-import { AgentTTSCoordinator, MasterAgentCoordinator } from './tts-coordinator';
+import { AgentTTSCoordinator, MasterAgentCoordinator, DEFAULT_AGENT_TTS_BASE_URL } from './tts-coordinator';
 
 export interface FullAgentContext {
   selfAwareness: AgentSelfAwareness;
@@ -56,10 +56,13 @@ export class FullyAwareAgent {
     agentId: string,
     agentName: string,
     role: string,
-    baseUrl = 'http://localhost:4692'
+    baseUrl = DEFAULT_AGENT_TTS_BASE_URL
   ) {
     this.baseUrl = baseUrl;
-    this.selfAwareness = createAgentSelfAwareness(agentId);
+    this.selfAwareness = createAgentSelfAwareness(agentId, {
+      agentName,
+      role,
+    });
     this.systemAwareness = createSystemAwareness(baseUrl, agentId);
     this.ttsCoordinator = new AgentTTSCoordinator(agentId, baseUrl);
   }
@@ -413,7 +416,7 @@ export function createFullyAwareAgent(
   agentId: string,
   agentName: string,
   role: string,
-  baseUrl = 'http://localhost:4692'
+  baseUrl = DEFAULT_AGENT_TTS_BASE_URL
 ): FullyAwareAgent {
   return new FullyAwareAgent(agentId, agentName, role, baseUrl);
 }

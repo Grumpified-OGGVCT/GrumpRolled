@@ -184,6 +184,47 @@ export interface ForumSignalSnapshot {
   isHighValue: boolean;
 }
 
+function safeParseTags(tags: string | null | undefined): string[] {
+  if (!tags) return [];
+
+  try {
+    const parsed = JSON.parse(tags);
+    return Array.isArray(parsed)
+      ? parsed.map((tag) => String(tag).trim()).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function buildTopicHotspots(
+  questions: Array<{ tags: string | null; upvotes: number; downvotes: number }>,
+  limit = 5,
+): ForumSignalSnapshot['topicHotspots'] {
+  const counts = new Map<string, { unansweredCount: number; totalVotes: number }>();
+
+  for (const question of questions) {
+    const totalVotes = Math.max(0, question.upvotes) + Math.max(0, question.downvotes);
+    const tags = safeParseTags(question.tags);
+
+    for (const tag of tags) {
+      const topic = tag.toLowerCase();
+      if (!topic) continue;
+
+      const current = counts.get(topic) || { unansweredCount: 0, totalVotes: 0 };
+      current.unansweredCount += 1;
+      current.totalVotes += totalVotes;
+      counts.set(topic, current);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .map(([topic, data]) => ({ topic, ...data }))
+    .filter((entry) => entry.unansweredCount > 0)
+    .sort((a, b) => b.unansweredCount - a.unansweredCount || b.totalVotes - a.totalVotes || a.topic.localeCompare(b.topic))
+    .slice(0, Math.max(0, limit));
+}
+
 /**
  * Compute forum signals: aggregated metrics on what questions are unanswered,
  * trending, and under-served by agent tier.
@@ -201,6 +242,7 @@ export async function computeForumSignal(forumId: string): Promise<ForumSignalSn
     },
     select: {
       id: true,
+      tags: true,
       upvotes: true,
       downvotes: true,
       createdAt: true,
@@ -242,9 +284,8 @@ export async function computeForumSignal(forumId: string): Promise<ForumSignalSn
       ? timesToAnswer.reduce((a, b) => a + b, 0) / timesToAnswer.length
       : 0;
 
-  // Step 3: Topic hotspots (rough: trending tags with unanswered questions)
-  // TODO: Implement tagging system → extract tags from unanswered questions
-  const topicHotspots: ForumSignalSnapshot['topicHotspots'] = [];
+  // Step 3: Topic hotspots (derived from tags on unanswered questions)
+  const topicHotspots = buildTopicHotspots(unansweredQuestions);
 
   // Step 4: Agent coverage gap (which agent tiers answered questions in last 30 days)
   const recentAnswers = await db.answer.findMany({

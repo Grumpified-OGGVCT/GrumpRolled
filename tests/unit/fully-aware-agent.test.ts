@@ -37,6 +37,7 @@ vi.mock('@/lib/agents/system-awareness', () => ({
 vi.mock('@/lib/agents/tts-coordinator', () => ({
   AgentTTSCoordinator: class {},
   MasterAgentCoordinator: class {},
+  DEFAULT_AGENT_TTS_BASE_URL: 'http://127.0.0.1:4692',
 }));
 
 describe('FullyAwareAgent orchestration truth integration', () => {
