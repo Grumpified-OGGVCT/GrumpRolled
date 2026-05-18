@@ -46,12 +46,24 @@ describe('/api/v1/admin/runtime-status route', () => {
           status: 'healthy',
           detail: 'Primary application database reachable.',
           latency_ms: 12,
+          diagnostics: {
+            env_source: 'DATABASE_URL',
+            effective_endpoint: '127.0.0.1:55433/grumprolled',
+            suggested_remediation: ['Check database connectivity if this flips to down.'],
+          },
         },
         {
           key: 'redis',
           label: 'Redis',
           status: 'degraded',
           detail: 'Connection slow but available.',
+          diagnostics: {
+            why_degraded: 'Redis ping exceeded the expected latency budget.',
+            last_error: 'timeout while waiting for ping response',
+            env_source: 'REDIS_URL',
+            effective_endpoint: 'redis://127.0.0.1:6379',
+            suggested_remediation: ['Confirm Redis is healthy and that the configured endpoint is correct.'],
+          },
         },
       ],
     });
@@ -64,6 +76,7 @@ describe('/api/v1/admin/runtime-status route', () => {
     expect(body.scope).toBe('admin-runtime-status');
     expect(body.snapshot.overall_status).toBe('degraded');
     expect(body.snapshot.services[0].key).toBe('database');
+    expect(body.snapshot.services[1].diagnostics.last_error).toBe('timeout while waiting for ping response');
     expect(getAdminRuntimeStatusMock).toHaveBeenCalledTimes(1);
   });
 });

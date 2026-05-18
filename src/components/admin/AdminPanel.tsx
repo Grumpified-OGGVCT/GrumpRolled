@@ -150,6 +150,23 @@ type RuntimeServiceSnapshot = {
   detail: string;
   latency_ms?: number;
   meta?: Record<string, string | number | boolean | null>;
+  diagnostics?: {
+    why_degraded?: string | null;
+    last_error?: string | null;
+    env_source?: string | null;
+    effective_endpoint?: string | null;
+    suggested_remediation?: string[];
+    drilldown_items?: Array<{
+      key: string;
+      label: string;
+      status?: RuntimeServiceStatus;
+      detail?: string;
+      why_degraded?: string | null;
+      last_error?: string | null;
+      env_source?: string | null;
+      effective_endpoint?: string | null;
+    }>;
+  };
 };
 
 type RuntimeStatusResponse = {
@@ -208,6 +225,18 @@ function runtimeStatusTone(status: RuntimeServiceStatus) {
     default:
       return 'border-slate-600 bg-slate-900/40 text-slate-300';
   }
+}
+
+function runtimeDetailsAvailable(service: RuntimeServiceSnapshot) {
+  const diagnostics = service.diagnostics;
+  return Boolean(
+    diagnostics?.why_degraded ||
+    diagnostics?.last_error ||
+    diagnostics?.env_source ||
+    diagnostics?.effective_endpoint ||
+    (diagnostics?.suggested_remediation && diagnostics.suggested_remediation.length > 0) ||
+    (diagnostics?.drilldown_items && diagnostics.drilldown_items.length > 0),
+  );
 }
 
 function queueGrouping(candidates: ExternalCandidate[]): QueueGroup[] {
@@ -738,6 +767,73 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
                           </span>
                         ))}
                       </div>
+                    )}
+                    {runtimeDetailsAvailable(service) && (
+                      <details className="rounded-md border border-gray-800 bg-gray-950/60 px-3 py-2 text-xs text-gray-300">
+                        <summary className="cursor-pointer list-none font-medium text-gray-200">
+                          Details / drill-down
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                          {service.diagnostics?.why_degraded && (
+                            <div>
+                              <p className="font-medium text-gray-100">Why degraded</p>
+                              <p className="mt-1 text-gray-300">{service.diagnostics.why_degraded}</p>
+                            </div>
+                          )}
+                          {service.diagnostics?.last_error && (
+                            <div>
+                              <p className="font-medium text-gray-100">Last error</p>
+                              <p className="mt-1 break-words text-gray-300">{service.diagnostics.last_error}</p>
+                            </div>
+                          )}
+                          {service.diagnostics?.env_source && (
+                            <div>
+                              <p className="font-medium text-gray-100">Env source</p>
+                              <p className="mt-1 break-words text-gray-300">{service.diagnostics.env_source}</p>
+                            </div>
+                          )}
+                          {service.diagnostics?.effective_endpoint && (
+                            <div>
+                              <p className="font-medium text-gray-100">Effective endpoint</p>
+                              <p className="mt-1 break-words text-gray-300">{service.diagnostics.effective_endpoint}</p>
+                            </div>
+                          )}
+                          {service.diagnostics?.suggested_remediation && service.diagnostics.suggested_remediation.length > 0 && (
+                            <div>
+                              <p className="font-medium text-gray-100">Suggested remediation</p>
+                              <div className="mt-1 space-y-1 text-gray-300">
+                                {service.diagnostics.suggested_remediation.map((step) => (
+                                  <p key={`${service.key}-${step}`}>• {step}</p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {service.diagnostics?.drilldown_items && service.diagnostics.drilldown_items.length > 0 && (
+                            <div>
+                              <p className="font-medium text-gray-100">Component statuses</p>
+                              <div className="mt-2 space-y-2">
+                                {service.diagnostics.drilldown_items.map((item) => (
+                                  <div key={item.key} className="rounded border border-gray-800 bg-gray-900/70 p-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="font-medium text-gray-100">{item.label}</p>
+                                      {item.status && <Badge className={runtimeStatusTone(item.status)}>{item.status}</Badge>}
+                                    </div>
+                                    {item.detail && <p className="mt-1 text-gray-300">{item.detail}</p>}
+                                    {(item.why_degraded || item.last_error || item.env_source || item.effective_endpoint) && (
+                                      <div className="mt-2 space-y-1 text-gray-400">
+                                        {item.why_degraded && <p>why: {item.why_degraded}</p>}
+                                        {item.last_error && <p>error: {item.last_error}</p>}
+                                        {item.env_source && <p>env: {item.env_source}</p>}
+                                        {item.effective_endpoint && <p>endpoint: {item.effective_endpoint}</p>}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </details>
                     )}
                   </div>
                 ))}

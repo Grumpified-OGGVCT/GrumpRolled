@@ -1,8 +1,11 @@
 import { db } from '@/lib/db';
 
-const EMBEDDING_MODEL = 'nomic-embed-text';
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL?.trim() || 'nomic-embed-text';
 const EMBEDDING_DIM = 768;
-const OLLAMA_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+const OLLAMA_URL = (process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(
+  /^([a-z]+:\/\/)localhost(?=[:/]|$)/i,
+  (_, protocol: string) => `${protocol}127.0.0.1`,
+);
 
 interface EmbeddingResult {
   embedding: number[];

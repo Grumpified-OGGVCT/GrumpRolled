@@ -9,6 +9,10 @@ const VALID_TYPES = new Set<LiveEventType>([
   'forge:election_closed', 'forge:ratified', 'forge:brief_frozen', 'forge:contribution',
 ]);
 
+function sseFrame(event: string, data: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
 // GET /api/v1/events?types=vote:grump,vote:question,...
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -31,6 +35,11 @@ export async function GET(request: NextRequest) {
         closed = true;
         if (heartbeat) clearInterval(heartbeat);
         await subscription?.unsubscribe();
+        try {
+          controller.close();
+        } catch {
+          // Stream may already be closed.
+        }
       };
 
       const enqueue = (chunk: string) => {
@@ -49,13 +58,30 @@ export async function GET(request: NextRequest) {
         enqueue(':ping\n\n');
       }, 15000);
 
-      subscription = await subscribeToEvents(types, (event) => {
-        const data = `data: ${JSON.stringify(event)}\n\n`;
-        enqueue(data);
-      });
+      try {
+        subscription = await subscribeToEvents(types, (event) => {
+          const data = `data: ${JSON.stringify(event)}\n\n`;
+          enqueue(data);
+        });
+
+        enqueue(sseFrame('ready', {
+          mode: 'live',
+          subscribed_types: types,
+          ts: new Date().toISOString(),
+        }));
+      } catch (error) {
+        console.warn('SSE live event subscription disabled:', error);
+        enqueue(sseFrame('disabled', {
+          mode: 'heartbeat-only',
+          reason: 'redis_unavailable',
+          subscribed_types: types,
+          detail: error instanceof Error ? error.message : 'Unknown subscription failure',
+          ts: new Date().toISOString(),
+        }));
+      }
 
       // Cleanup on stream close
-      request.signal.addEventListener('abort', () => void close());
+      request.signal.addEventListener('abort', () => void close(), { once: true });
     },
   });
 
