@@ -2,6 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const isAdminRequestMock = vi.fn();
 const authenticateAgentRequestMock = vi.fn();
+let coordinationStore: Array<{
+  id: string;
+  fromAgent: string;
+  toAgents: string[];
+  action: string;
+  payload: Record<string, unknown>;
+  timestamp: Date;
+  idempotencyKey: string;
+  processedAt: Date | null;
+}> = [];
+let coordinationCounter = 0;
 
 vi.mock('@/lib/admin', () => ({
   isAdminRequest: isAdminRequestMock,
@@ -9,6 +20,81 @@ vi.mock('@/lib/admin', () => ({
 
 vi.mock('@/lib/auth', () => ({
   authenticateAgentRequest: authenticateAgentRequestMock,
+}));
+
+vi.mock('@/lib/db', () => ({
+  db: {
+    coordinationMessage: {
+      create: vi.fn(async ({ data }: { data: { fromAgent: string; toAgents: string[]; action: string; payload: Record<string, unknown>; timestamp: Date; idempotencyKey: string } }) => {
+        const duplicate = coordinationStore.find((message) => message.idempotencyKey === data.idempotencyKey);
+        if (duplicate) {
+          throw { code: 'P2002' };
+        }
+
+        const created = {
+          id: `coord-${++coordinationCounter}`,
+          fromAgent: data.fromAgent,
+          toAgents: [...data.toAgents],
+          action: data.action,
+          payload: data.payload,
+          timestamp: data.timestamp,
+          idempotencyKey: data.idempotencyKey,
+          processedAt: null,
+        };
+        coordinationStore.push(created);
+        return created;
+      }),
+      findUnique: vi.fn(async ({ where }: { where: { id?: string; idempotencyKey?: string } }) => {
+        if (where.id) {
+          return coordinationStore.find((message) => message.id === where.id) ?? null;
+        }
+        if (where.idempotencyKey) {
+          return coordinationStore.find((message) => message.idempotencyKey === where.idempotencyKey) ?? null;
+        }
+        return null;
+      }),
+      findMany: vi.fn(async ({ where, take }: { where?: { processedAt?: null; OR?: Array<{ toAgents?: { isEmpty?: boolean; has?: string }; fromAgent?: string }> }; take?: number }) => {
+        let results = [...coordinationStore];
+
+        if (where?.processedAt === null) {
+          results = results.filter((message) => message.processedAt === null);
+        }
+
+        if (where?.OR?.length) {
+          results = results.filter((message) =>
+            where.OR!.some((rule) => {
+              if (rule.fromAgent) {
+                return message.fromAgent === rule.fromAgent;
+              }
+              if (rule.toAgents?.isEmpty) {
+                return message.toAgents.length === 0;
+              }
+              if (rule.toAgents?.has) {
+                return message.toAgents.includes(rule.toAgents.has);
+              }
+              return false;
+            }),
+          );
+        }
+
+        results.sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime());
+        return typeof take === 'number' ? results.slice(0, take) : results;
+      }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: { processedAt: Date } }) => {
+        const message = coordinationStore.find((entry) => entry.id === where.id);
+        if (!message) {
+          throw new Error('not found');
+        }
+        message.processedAt = data.processedAt;
+        return message;
+      }),
+      deleteMany: vi.fn(async () => {
+        coordinationStore = [];
+        coordinationCounter = 0;
+        return { count: 0 };
+      }),
+    },
+  },
 }));
 
 function makeRequest(url: string, body?: unknown) {
@@ -23,11 +109,13 @@ function makeRequest(url: string, body?: unknown) {
 describe('ops coordination api routes', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    coordinationStore = [];
+    coordinationCounter = 0;
     isAdminRequestMock.mockReturnValue(false);
     authenticateAgentRequestMock.mockResolvedValue(null);
 
     const { clearCoordinationMessagesForTests } = await import('../../src/lib/ops-coordination');
-    clearCoordinationMessagesForTests();
+    await clearCoordinationMessagesForTests();
   });
 
   it('rejects anonymous reads', async () => {
@@ -101,24 +189,24 @@ describe('ops coordination api routes', () => {
     authenticateAgentRequestMock.mockResolvedValue({ id: 'agent-1', username: 'alpha' });
 
     const { submitCoordinationMessage } = await import('../../src/lib/ops-coordination');
-    submitCoordinationMessage({
+    await submitCoordinationMessage({
       fromAgent: 'master-agent',
       action: 'health-check',
       payload: { scope: 'all' },
     });
-    submitCoordinationMessage({
+    await submitCoordinationMessage({
       fromAgent: 'bravo',
       toAgents: ['alpha'],
       action: 'coordinate',
       payload: { task: 'review' },
     });
-    submitCoordinationMessage({
+    await submitCoordinationMessage({
       fromAgent: 'alpha',
       toAgents: ['charlie'],
       action: 'share',
       payload: { topic: 'done' },
     });
-    submitCoordinationMessage({
+    await submitCoordinationMessage({
       fromAgent: 'charlie',
       toAgents: ['delta'],
       action: 'share',
@@ -144,24 +232,24 @@ describe('ops coordination api routes', () => {
     isAdminRequestMock.mockReturnValue(true);
 
     const { submitCoordinationMessage } = await import('../../src/lib/ops-coordination');
-    submitCoordinationMessage({
+    await submitCoordinationMessage({
       fromAgent: 'master-agent',
       action: 'health-check',
       payload: { scope: 'all' },
     });
-    submitCoordinationMessage({
+    await submitCoordinationMessage({
       fromAgent: 'bravo',
       toAgents: ['alpha'],
       action: 'coordinate',
       payload: { task: 'review' },
     });
-    submitCoordinationMessage({
+    await submitCoordinationMessage({
       fromAgent: 'alpha',
       toAgents: ['charlie'],
       action: 'share',
       payload: { topic: 'done' },
     });
-    submitCoordinationMessage({
+    await submitCoordinationMessage({
       fromAgent: 'charlie',
       toAgents: ['delta'],
       action: 'share',
@@ -182,7 +270,7 @@ describe('ops coordination api routes', () => {
     authenticateAgentRequestMock.mockResolvedValue({ id: 'agent-1', username: 'alpha' });
 
     const { submitCoordinationMessage, listCoordinationMessages } = await import('../../src/lib/ops-coordination');
-    const created = submitCoordinationMessage({
+    const created = await submitCoordinationMessage({
       fromAgent: 'bravo',
       toAgents: ['alpha'],
       action: 'coordinate',
@@ -203,14 +291,14 @@ describe('ops coordination api routes', () => {
         processedAt: expect.any(String),
       },
     });
-    expect(listCoordinationMessages({ agent: 'alpha', includeSentByAgent: true })).toHaveLength(0);
+    await expect(listCoordinationMessages({ agent: 'alpha', includeSentByAgent: true })).resolves.toHaveLength(0);
   });
 
   it('blocks agents from processing unrelated messages', async () => {
     authenticateAgentRequestMock.mockResolvedValue({ id: 'agent-1', username: 'alpha' });
 
     const { submitCoordinationMessage } = await import('../../src/lib/ops-coordination');
-    const created = submitCoordinationMessage({
+    const created = await submitCoordinationMessage({
       fromAgent: 'bravo',
       toAgents: ['charlie'],
       action: 'coordinate',

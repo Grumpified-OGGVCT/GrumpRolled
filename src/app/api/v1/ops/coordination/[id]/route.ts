@@ -22,7 +22,7 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    const message = getCoordinationMessageById(id);
+    const message = await getCoordinationMessageById(id);
 
     if (!message) {
       return NextResponse.json({ error: 'Coordination message not found' }, { status: 404 });
@@ -37,7 +37,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const updatedMessage = markCoordinationMessageProcessed(id);
+    const updatedMessage = await markCoordinationMessageProcessed(id);
     return NextResponse.json({ success: true, message: updatedMessage });
   } catch (error) {
     console.error('Mark coordination message processed error:', error);

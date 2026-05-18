@@ -1,20 +1,27 @@
 import Redis from 'ioredis';
+import { attachRedisNoiseGuard, createRedisOptions, getRedisUrl } from '@/lib/redis-config';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const REDIS_URL = getRedisUrl();
 
 let pubClient: Redis | null = null;
 let subClient: Redis | null = null;
 
 function getPubClient(): Redis {
   if (!pubClient) {
-    pubClient = new Redis(REDIS_URL);
+    pubClient = new Redis(REDIS_URL, createRedisOptions('default'));
+    attachRedisNoiseGuard(pubClient, 'events:pub', () => {
+      pubClient = null;
+    });
   }
   return pubClient;
 }
 
 function getSubClient(): Redis {
   if (!subClient) {
-    subClient = new Redis(REDIS_URL);
+    subClient = new Redis(REDIS_URL, createRedisOptions('default'));
+    attachRedisNoiseGuard(subClient, 'events:sub', () => {
+      subClient = null;
+    });
   }
   return subClient;
 }

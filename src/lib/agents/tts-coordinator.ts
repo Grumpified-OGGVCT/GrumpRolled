@@ -114,7 +114,7 @@ export class AgentTTSCoordinator {
       ...options,
     });
 
-    return submitCoordinationMessage({
+    const result = await submitCoordinationMessage({
       fromAgent: this.agentId,
       toAgents: targetAgents,
       action: 'share',
@@ -126,7 +126,9 @@ export class AgentTTSCoordinator {
       },
       timestamp: new Date().toISOString(),
       idempotencyKey: `${this.agentId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    }).message;
+    });
+
+    return result.message;
   }
 
   /**
@@ -157,7 +159,7 @@ export class AgentTTSCoordinator {
     targetAgents: string[],
     payload: Record<string, any>
   ): Promise<AgentCoordinationMessage> {
-    return submitCoordinationMessage({
+    const result = await submitCoordinationMessage({
       fromAgent: this.agentId,
       toAgents: targetAgents,
       action: 'coordinate',
@@ -167,13 +169,15 @@ export class AgentTTSCoordinator {
       },
       timestamp: new Date().toISOString(),
       idempotencyKey: `${this.agentId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    }).message;
+    });
+
+    return result.message;
   }
 
   /**
    * Get pending coordination messages
    */
-  getPendingMessages(): AgentCoordinationMessage[] {
+  async getPendingMessages(): Promise<AgentCoordinationMessage[]> {
     return listCoordinationMessages({
       agent: this.agentId,
       includeSentByAgent: true,
@@ -184,14 +188,14 @@ export class AgentTTSCoordinator {
   /**
    * Clear processed messages
    */
-  clearProcessedMessages(count: number): void {
-    const messagesToMark = this.getPendingMessages().slice(0, Math.max(0, count));
+  async clearProcessedMessages(count: number): Promise<void> {
+    const messagesToMark = (await this.getPendingMessages()).slice(0, Math.max(0, count));
 
-    messagesToMark.forEach((message) => {
+    await Promise.all(messagesToMark.map(async (message) => {
       if (message.id) {
-        markCoordinationMessageProcessed(message.id);
+        await markCoordinationMessageProcessed(message.id);
       }
-    });
+    }));
   }
 
   /**

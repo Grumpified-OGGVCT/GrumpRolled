@@ -1,15 +1,16 @@
 import { Queue, Worker, JobsOptions } from 'bullmq';
 import Redis from 'ioredis';
+import { attachRedisNoiseGuard, createRedisOptions, getRedisUrl } from '@/lib/redis-config';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const REDIS_URL = getRedisUrl();
 
 let connection: Redis | null = null;
 
 function getConnection(): Redis {
   if (!connection) {
-    connection = new Redis(REDIS_URL, {
-      maxRetriesPerRequest: null, // required by BullMQ
-      enableReadyCheck: false,
+    connection = new Redis(REDIS_URL, createRedisOptions('bullmq'));
+    attachRedisNoiseGuard(connection, 'queue', () => {
+      connection = null;
     });
   }
   return connection;

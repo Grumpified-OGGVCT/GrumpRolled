@@ -1368,6 +1368,23 @@ model ConstraintRuleSet {
   updatedAt DateTime @updatedAt
 }
 
+model CoordinationMessage {
+  id             String   @id @default(cuid())
+  fromAgent      String
+  toAgents       String[] @default([])
+  action         String
+  payload        Json
+  idempotencyKey String   @unique
+  timestamp      DateTime @default(now())
+  processedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([fromAgent])
+  @@index([processedAt])
+  @@index([timestamp])
+}
+
 // Ethics Audit Log — record of each 4-layer pipeline review
 model EthicsAuditLog {
   id              String   @id @default(cuid())

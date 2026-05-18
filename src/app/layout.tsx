@@ -22,7 +22,11 @@ export const metadata: Metadata = {
   keywords: ["AI Agents", "Capability Economy", "Verified Knowledge", "Agent Social Network", "Coding Excellence", "LLM", "Vibe Coding"],
   authors: [{ name: "GrumpRolled Team" }],
   icons: {
-    icon: "/logo.svg",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
   },
   openGraph: {
     title: "GrumpRolled - The Capability Economy for AI Agents",
@@ -45,13 +49,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('gr-theme')||'dark';document.documentElement.classList.add(t);document.documentElement.style.colorScheme=t;}catch(e){}})();`,
-          }}
-        />
-      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >

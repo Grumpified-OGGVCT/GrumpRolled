@@ -2,6 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const axiosPostMock = vi.fn();
 const axiosGetMock = vi.fn();
+let coordinationStore: Array<{
+  id: string;
+  fromAgent: string;
+  toAgents: string[];
+  action: string;
+  payload: Record<string, unknown>;
+  timestamp: Date;
+  idempotencyKey: string;
+  processedAt: Date | null;
+}> = [];
+let coordinationCounter = 0;
 
 vi.mock('axios', () => ({
   default: {
@@ -10,9 +21,87 @@ vi.mock('axios', () => ({
   },
 }));
 
+vi.mock('@/lib/db', () => ({
+  db: {
+    coordinationMessage: {
+      create: vi.fn(async ({ data }: { data: { fromAgent: string; toAgents: string[]; action: string; payload: Record<string, unknown>; timestamp: Date; idempotencyKey: string } }) => {
+        const duplicate = coordinationStore.find((message) => message.idempotencyKey === data.idempotencyKey);
+        if (duplicate) {
+          throw { code: 'P2002' };
+        }
+
+        const created = {
+          id: `coord-${++coordinationCounter}`,
+          fromAgent: data.fromAgent,
+          toAgents: [...data.toAgents],
+          action: data.action,
+          payload: data.payload,
+          timestamp: data.timestamp,
+          idempotencyKey: data.idempotencyKey,
+          processedAt: null,
+        };
+
+        coordinationStore.push(created);
+        return created;
+      }),
+      findUnique: vi.fn(async ({ where }: { where: { id?: string; idempotencyKey?: string } }) => {
+        if (where.id) {
+          return coordinationStore.find((message) => message.id === where.id) ?? null;
+        }
+        if (where.idempotencyKey) {
+          return coordinationStore.find((message) => message.idempotencyKey === where.idempotencyKey) ?? null;
+        }
+        return null;
+      }),
+      findMany: vi.fn(async ({ where, take }: { where?: { processedAt?: null; OR?: Array<{ toAgents?: { isEmpty?: boolean; has?: string }; fromAgent?: string }> }; take?: number }) => {
+        let results = [...coordinationStore];
+
+        if (where?.processedAt === null) {
+          results = results.filter((message) => message.processedAt === null);
+        }
+
+        if (where?.OR?.length) {
+          results = results.filter((message) =>
+            where.OR!.some((rule) => {
+              if (rule.fromAgent) {
+                return message.fromAgent === rule.fromAgent;
+              }
+              if (rule.toAgents?.isEmpty) {
+                return message.toAgents.length === 0;
+              }
+              if (rule.toAgents?.has) {
+                return message.toAgents.includes(rule.toAgents.has);
+              }
+              return false;
+            }),
+          );
+        }
+
+        results.sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime());
+        return typeof take === 'number' ? results.slice(0, take) : results;
+      }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: { processedAt: Date } }) => {
+        const message = coordinationStore.find((entry) => entry.id === where.id);
+        if (!message) {
+          throw new Error('not found');
+        }
+        message.processedAt = data.processedAt;
+        return message;
+      }),
+      deleteMany: vi.fn(async () => {
+        coordinationStore = [];
+        coordinationCounter = 0;
+        return { count: 0 };
+      }),
+    },
+  },
+}));
+
 describe('AgentTTSCoordinator shared coordination queue', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    coordinationStore = [];
+    coordinationCounter = 0;
     axiosPostMock.mockResolvedValue({
       headers: {
         'x-tts-provider': 'mimic3',
@@ -27,7 +116,7 @@ describe('AgentTTSCoordinator shared coordination queue', () => {
     });
 
     const { clearCoordinationMessagesForTests } = await import('../../src/lib/ops-coordination');
-    clearCoordinationMessagesForTests();
+    await clearCoordinationMessagesForTests();
   });
 
   it('shares coordination messages across coordinator instances', async () => {
@@ -38,7 +127,7 @@ describe('AgentTTSCoordinator shared coordination queue', () => {
 
     await alpha.coordinateWithAgents('review_plan', ['bravo'], { topic: 'ops' });
 
-    expect(bravo.getPendingMessages()).toMatchObject([
+    await expect(bravo.getPendingMessages()).resolves.toMatchObject([
       {
         fromAgent: 'alpha',
         toAgents: ['bravo'],
@@ -64,7 +153,7 @@ describe('AgentTTSCoordinator shared coordination queue', () => {
       { text: 'hello agents', provider: 'mimic3' },
       expect.objectContaining({ responseType: 'arraybuffer', timeout: 15000 }),
     );
-    expect(bravo.getPendingMessages()).toMatchObject([
+    await expect(bravo.getPendingMessages()).resolves.toMatchObject([
       {
         fromAgent: 'alpha',
         toAgents: ['bravo'],
@@ -82,7 +171,7 @@ describe('AgentTTSCoordinator shared coordination queue', () => {
     const { AgentTTSCoordinator } = await import('../../src/lib/agents/tts-coordinator');
     const { submitCoordinationMessage } = await import('../../src/lib/ops-coordination');
 
-    submitCoordinationMessage({
+    await submitCoordinationMessage({
       fromAgent: 'alpha',
       toAgents: ['bravo'],
       action: 'coordinate',
@@ -90,7 +179,7 @@ describe('AgentTTSCoordinator shared coordination queue', () => {
       timestamp: '2026-01-01T00:00:00.000Z',
       idempotencyKey: 'older-key',
     });
-    submitCoordinationMessage({
+    await submitCoordinationMessage({
       fromAgent: 'alpha',
       toAgents: ['bravo'],
       action: 'coordinate',
@@ -101,11 +190,16 @@ describe('AgentTTSCoordinator shared coordination queue', () => {
 
     const bravo = new AgentTTSCoordinator('bravo', 'https://example.test');
 
-    expect(bravo.getPendingMessages().map((message) => message.payload.task)).toEqual(['newer', 'older']);
+    await expect(bravo.getPendingMessages()).resolves.toMatchObject([
+      { payload: { task: 'newer' } },
+      { payload: { task: 'older' } },
+    ]);
 
-    bravo.clearProcessedMessages(1);
+    await bravo.clearProcessedMessages(1);
 
-    expect(bravo.getPendingMessages().map((message) => message.payload.task)).toEqual(['older']);
+    await expect(bravo.getPendingMessages()).resolves.toMatchObject([
+      { payload: { task: 'older' } },
+    ]);
   });
 });
 

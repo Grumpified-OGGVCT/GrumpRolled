@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { attachRedisNoiseGuard, createRedisOptions, getRedisUrl } from '@/lib/redis-config';
 
 interface RateLimitResult {
   allowed: boolean;
@@ -24,10 +25,11 @@ let redis: Redis | null = null;
 function getRedis(): Redis | null {
   if (redis) return redis;
   try {
-    const url = process.env.REDIS_URL;
-    if (!url) return null;
-    redis = new Redis(url, { maxRetriesPerRequest: 1, lazyConnect: false });
-    redis.on('error', () => { redis = null; });
+    const url = getRedisUrl();
+    redis = new Redis(url, createRedisOptions('rate-limit'));
+    attachRedisNoiseGuard(redis, 'rate-limit', () => {
+      redis = null;
+    });
     return redis;
   } catch {
     return null;

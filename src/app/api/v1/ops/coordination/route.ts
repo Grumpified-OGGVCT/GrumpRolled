@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const fromAgent = authAgent?.username ?? sanitizeOptionalString(body?.fromAgent) ?? 'master-agent';
-    const { message, duplicate } = submitCoordinationMessage({
+    const { message, duplicate } = await submitCoordinationMessage({
       fromAgent,
       toAgents: sanitizeCoordinationAgentList(body?.toAgents),
       action,
@@ -113,13 +113,13 @@ export async function GET(request: NextRequest) {
     const agentFilter = admin ? sanitizeOptionalString(searchParams.get('agent')) : authAgent!.username;
 
     const messages = agentFilter
-      ? listCoordinationMessages({
+      ? await listCoordinationMessages({
           agent: agentFilter,
           includeProcessed,
           includeSentByAgent: true,
           limit,
         })
-      : listCoordinationMessages({ includeProcessed, limit });
+      : await listCoordinationMessages({ includeProcessed, limit });
 
     return NextResponse.json({
       viewer_scope: admin ? 'owner' : 'agent',

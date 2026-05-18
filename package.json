@@ -64,6 +64,7 @@
     "runtime:reuse-ui": "node scripts/runtime-validate-reviewed-reuse-ui.mjs",
     "runtime:trust-routing": "node scripts/runtime-validate-trust-routing.mjs",
     "runtime:skills-loop": "node scripts/runtime-validate-skills-loop.mjs",
+    "runtime:coordination-persistence": "node scripts/runtime-validate-coordination-persistence.mjs",
     "runtime:cross-post-queue": "node scripts/runtime-validate-cross-post-queue.mjs",
     "runtime:cross-post-send-configured": "node scripts/runtime-validate-cross-post-send-configured.mjs",
     "runtime:owner-moderation": "node scripts/runtime-validate-owner-moderation.mjs",

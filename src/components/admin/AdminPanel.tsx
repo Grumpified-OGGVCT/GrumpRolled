@@ -141,6 +141,31 @@ type ContentBlocksResponse = {
   blocks?: ContentBlockItem[];
 };
 
+type RuntimeServiceStatus = 'healthy' | 'degraded' | 'down' | 'disabled';
+
+type RuntimeServiceSnapshot = {
+  key: string;
+  label: string;
+  status: RuntimeServiceStatus;
+  detail: string;
+  latency_ms?: number;
+  meta?: Record<string, string | number | boolean | null>;
+};
+
+type RuntimeStatusResponse = {
+  snapshot?: {
+    refreshed_at: string;
+    overall_status: 'healthy' | 'degraded' | 'down';
+    summary: {
+      healthy: number;
+      degraded: number;
+      down: number;
+      disabled: number;
+    };
+    services: RuntimeServiceSnapshot[];
+  };
+};
+
 type SafetyWindow = '24h' | '7d' | '30d';
 
 type QueueGroup = {
@@ -170,6 +195,19 @@ function severityTone(severity: 'info' | 'warning' | 'critical') {
   if (severity === 'critical') return 'border-red-500/40 bg-red-950/30 text-red-200';
   if (severity === 'warning') return 'border-yellow-500/40 bg-yellow-950/30 text-yellow-100';
   return 'border-blue-500/40 bg-blue-950/30 text-blue-100';
+}
+
+function runtimeStatusTone(status: RuntimeServiceStatus) {
+  switch (status) {
+    case 'healthy':
+      return 'border-emerald-500/40 bg-emerald-950/20 text-emerald-200';
+    case 'degraded':
+      return 'border-amber-500/40 bg-amber-950/20 text-amber-100';
+    case 'down':
+      return 'border-red-500/40 bg-red-950/25 text-red-200';
+    default:
+      return 'border-slate-600 bg-slate-900/40 text-slate-300';
+  }
 }
 
 function queueGrouping(candidates: ExternalCandidate[]): QueueGroup[] {
@@ -222,6 +260,9 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
   const [candidateHistory, setCandidateHistory] = useState<ExternalCandidate[]>([]);
   const [federationHealth, setFederationHealth] = useState<FederationHealthResponse | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlocksResponse | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusResponse['snapshot'] | null>(null);
+  const [runtimeStatusError, setRuntimeStatusError] = useState<string | null>(null);
+  const [runtimeStatusRefreshing, setRuntimeStatusRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('queue');
@@ -307,6 +348,40 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
     return headers;
   }, [adminKey, hasAdminSession]);
 
+  async function fetchRuntimeStatus(options: { silent?: boolean } = {}) {
+    const { silent = false } = options;
+
+    if (!silent) {
+      setRuntimeStatusRefreshing(true);
+    }
+
+    try {
+      const response = await fetch(`${apiBase}/admin/runtime-status`, { headers: adminHeaders });
+      const payload = (await response.json().catch(() => null)) as RuntimeStatusResponse | null;
+
+      if (response.status === 403) {
+        setRuntimeStatus(null);
+        setRuntimeStatusError('Owner session or admin key required to view runtime dependencies.');
+        return;
+      }
+
+      if (payload?.snapshot) {
+        setRuntimeStatus(payload.snapshot);
+        setRuntimeStatusError(null);
+        return;
+      }
+
+      throw new Error((payload as { error?: string } | null)?.error || `Runtime status failed with ${response.status}`);
+    } catch (runtimeError) {
+      console.error('AdminPanel runtime status error:', runtimeError);
+      setRuntimeStatusError(runtimeError instanceof Error ? runtimeError.message : 'Failed to load runtime dependency status.');
+    } finally {
+      if (!silent) {
+        setRuntimeStatusRefreshing(false);
+      }
+    }
+  }
+
   async function fetchState() {
     setLoading(true);
     setError(null);
@@ -355,6 +430,7 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
       setCandidateHistory((candidateHistoryData?.candidates ?? []).filter((candidate: ExternalCandidate) => candidate.status !== 'QUEUED'));
       setFederationHealth(federationPayload);
       setContentBlocks(contentBlocksPayload);
+      await fetchRuntimeStatus({ silent: true });
     } catch (fetchError) {
       console.error('AdminPanel fetch error:', fetchError);
       setError('Failed to load admin state.');
@@ -366,6 +442,16 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
   useEffect(() => {
     fetchState();
   }, [apiBase, adminKey, hasAdminSession, safetyWindow]);
+
+  useEffect(() => {
+    void fetchRuntimeStatus();
+
+    const intervalId = window.setInterval(() => {
+      void fetchRuntimeStatus({ silent: true });
+    }, 15000);
+
+    return () => window.clearInterval(intervalId);
+  }, [apiBase, adminKey, hasAdminSession]);
 
   // Read URL params on mount (avoid hydration mismatch by syncing post-hydration)
   useEffect(() => {
@@ -595,6 +681,77 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
         <StatCard title="Self-Expr Blocks" value={stats.blockedSelfExpression} color="text-pink-300" />
         <StatCard title="Federation Pending" value={stats.pendingFederation} color="text-green-400" />
       </div>
+
+      <Card className="bg-gray-800/50 border-gray-700">
+        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <CardTitle className="text-white text-lg">Runtime Dependencies</CardTitle>
+            <CardDescription>
+              Live owner-facing indicators for backing services and env-gated operational paths that GrumpRolled depends on.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+            <Badge className={runtimeStatusTone(runtimeStatus?.overall_status ?? 'disabled')}>
+              overall {runtimeStatus?.overall_status ?? 'unknown'}
+            </Badge>
+            <span>
+              {runtimeStatus?.refreshed_at
+                ? `last checked ${new Date(runtimeStatus.refreshed_at).toLocaleTimeString()}`
+                : 'waiting for first status snapshot'}
+            </span>
+            <span>auto-refresh 15s</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-gray-700 text-gray-200"
+              onClick={() => void fetchRuntimeStatus()}
+            >
+              {runtimeStatusRefreshing ? 'Checking…' : 'Refresh runtime'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {runtimeStatusError ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-sm text-amber-100">
+              {runtimeStatusError}
+            </div>
+          ) : !runtimeStatus ? (
+            <p className="text-sm text-gray-400">Loading runtime dependency status…</p>
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                {runtimeStatus.services.map((service) => (
+                  <div key={service.key} className="rounded-lg border border-gray-700 bg-gray-900/50 p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-white">{service.label}</p>
+                        <p className="text-xs text-gray-400">{service.latency_ms ? `${service.latency_ms} ms` : 'no latency sample'}</p>
+                      </div>
+                      <Badge className={runtimeStatusTone(service.status)}>{service.status}</Badge>
+                    </div>
+                    <p className="text-sm text-gray-300">{service.detail}</p>
+                    {service.meta && Object.keys(service.meta).length > 0 && (
+                      <div className="flex flex-wrap gap-2 text-[11px] text-gray-400">
+                        {Object.entries(service.meta).slice(0, 3).map(([key, value]) => (
+                          <span key={`${service.key}-${key}`} className="rounded border border-gray-700 px-2 py-1">
+                            {key.replace(/_/g, ' ')} {String(value)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-3 text-xs text-gray-400">
+                <span>healthy {runtimeStatus.summary.healthy}</span>
+                <span>degraded {runtimeStatus.summary.degraded}</span>
+                <span>down {runtimeStatus.summary.down}</span>
+                <span>disabled {runtimeStatus.summary.disabled}</span>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
         <Card className="bg-gray-800/50 border-gray-700">
