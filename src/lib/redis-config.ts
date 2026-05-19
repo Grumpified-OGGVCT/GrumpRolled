@@ -60,3 +60,18 @@ export function attachRedisNoiseGuard(client: Redis, label: string, onFailure?: 
     console.warn(`[redis:${label}] ${message}`);
   });
 }
+
+export function parseRedisVersion(info: string | null | undefined): string | null {
+  if (!info) return null;
+
+  const match = info.match(/(?:^|\r?\n)redis_version:([^\r\n]+)/i);
+  return match?.[1]?.trim() || null;
+}
+
+export function redisSupportsBullMQ(version: string | null | undefined): boolean {
+  if (!version) return false;
+
+  const [majorText] = version.split('.');
+  const major = Number.parseInt(majorText || '', 10);
+  return Number.isFinite(major) && major >= 5;
+}

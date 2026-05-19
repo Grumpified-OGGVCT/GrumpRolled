@@ -3,7 +3,7 @@ import Redis from 'ioredis';
 import { getChatOverflowWriteConfig } from '@/lib/cross-post';
 import { db } from '@/lib/db';
 import { getProviderInventory, healthCheckProviders } from '@/lib/llm-provider-router';
-import { attachRedisNoiseGuard, createRedisOptions, getRedisUrl } from '@/lib/redis-config';
+import { attachRedisNoiseGuard, createRedisOptions, getRedisUrl, parseRedisVersion, redisSupportsBullMQ } from '@/lib/redis-config';
 
 export type RuntimeServiceStatus = 'healthy' | 'degraded' | 'down' | 'disabled';
 
@@ -143,24 +143,37 @@ async function checkRedis(): Promise<RuntimeServiceSnapshot> {
     client = new Redis(redisUrl, createRedisOptions('healthcheck'));
     attachRedisNoiseGuard(client, 'healthcheck');
 
-    const { latencyMs } = await withTiming(async () => {
+    const { latencyMs, value } = await withTiming(async () => {
       await client!.connect();
       await client!.ping();
+      return client!.info('server');
     });
+
+    const redisVersion = parseRedisVersion(value);
+    const bullmqReady = redisSupportsBullMQ(redisVersion);
 
     return {
       key: 'redis',
       label: 'Redis',
-      status: 'healthy',
-      detail: 'Queue/event cache reachable.',
+      status: bullmqReady ? 'healthy' : 'degraded',
+      detail: bullmqReady
+        ? 'Queue/event cache reachable.'
+        : `Redis reachable, but server version ${redisVersion || 'unknown'} is below BullMQ's Redis 5 minimum.`,
       latency_ms: latencyMs,
       meta: {
         url: redisUrl,
+        redis_version: redisVersion,
+        bullmq_ready: bullmqReady,
       },
       diagnostics: {
+        why_degraded: bullmqReady ? null : `BullMQ workers require Redis 5+, but the current server reports ${redisVersion || 'an unknown version'}.`,
         env_source: envSource,
         effective_endpoint: redisUrl,
-        suggested_remediation: buildRemediation('If live events or queues degrade, confirm the Redis service is running and that REDIS_URL targets the correct port.'),
+        suggested_remediation: buildRemediation(
+          !bullmqReady && 'Upgrade local Redis to version 5 or newer before relying on BullMQ-backed worker execution.',
+          !bullmqReady && 'Until then, direct fallback paths may work, but queue-worker launch readiness remains degraded.',
+          bullmqReady && 'If live events or queues degrade, confirm the Redis service is running and that REDIS_URL targets the correct port.',
+        ),
       },
     };
   } catch (error) {
