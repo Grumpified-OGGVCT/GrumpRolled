@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { authenticateAgentRequest } from '@/lib/auth';
-import { enqueueReputationReconcile } from '@/lib/queue';
+import { enqueueFederationProcess, enqueueReputationReconcile } from '@/lib/queue';
 import { publishLiveEvent } from '@/lib/events';
 import { queueAcceptedAnswerForCrossPost } from '@/lib/cross-post';
 import { createNotification } from '@/lib/notifications';
@@ -72,12 +72,23 @@ export async function POST(
     });
 
     const crossPost = await queueAcceptedAnswerForCrossPost(id, answerId);
+    let outboundWorkerEnqueued = false;
+
+    if (crossPost.queued && crossPost.queue_id) {
+      try {
+        await enqueueFederationProcess(crossPost.queue_id);
+        outboundWorkerEnqueued = true;
+      } catch (error) {
+        console.warn('Failed to enqueue federation send worker:', error);
+      }
+    }
 
     return NextResponse.json({
       question_id: id,
       accepted_answer_id: answerId,
       status: 'ANSWERED',
       outbound_cross_post: crossPost,
+      outbound_worker_enqueued: outboundWorkerEnqueued,
       message: 'Answer accepted successfully',
     });
   } catch (error) {

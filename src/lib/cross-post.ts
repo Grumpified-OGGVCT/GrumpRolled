@@ -119,7 +119,7 @@ export async function queueForCrossPost(
   confidence: number,
   verificationMethod: string,
   verificationPasses: number
-): Promise<{ queued: boolean; reason: string }> {
+): Promise<{ queued: boolean; reason: string; queue_id?: string }> {
   const dedupKey = computeDedupKey(questionText);
 
   // Early gate: is this candidate-worthy?
@@ -142,7 +142,7 @@ export async function queueForCrossPost(
 
   try {
     // Queue the cross-post entry
-    await crossPostQueueRepository.create({
+    const created = await crossPostQueueRepository.create({
       sourceQuestionId: questionId,
       sourceAnswerId: answerId,
       sourcePlatform: 'GrumpRolled',
@@ -160,6 +160,7 @@ export async function queueForCrossPost(
     return {
       queued: true,
       reason: 'queued_for_next_batch',
+      queue_id: created.id,
     };
   } catch (error) {
     console.error('Cross-post queue error:', error);
@@ -397,40 +398,16 @@ export async function processPendingCrossPosts(
   let sawUnauthorized = false;
 
   for (const entry of pending) {
-    try {
-      const formatted = formatChatOverflowPost(
-        entry.questionText,
-        entry.answerText,
-        entry.confidence,
-        entry.sourceUrl,
-        entry.sourceForumTag
-      );
-
-      const created = await createChatOverflowQuestion(
-        {
-          title: formatted.title,
-          body: formatted.body,
-          forum_id: config.forumId,
-        },
-        {
-          bearerToken: config.apiKey,
-          apiBaseUrl: config.apiBaseUrl,
-        }
-      );
-
-      await markCrossPostSent(entry.id, created.id);
-      await recordSuccessfulCrossPostFlowback(entry.id, created.id, entry.confidence);
+    const result = await processCrossPostEntry(entry, config);
+    if (result.status === 'SENT') {
       sent += 1;
-      results.push({ id: entry.id, status: 'SENT', chat_overflow_post_id: created.id });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown cross-post failure';
-      if (isTerminalCrossPostFailure(message)) {
+    } else if (result.status === 'FAILED') {
+      failed += 1;
+      if (result.error && isTerminalCrossPostFailure(result.error)) {
         sawUnauthorized = true;
       }
-      await markCrossPostFailed(entry.id, message);
-      failed += 1;
-      results.push({ id: entry.id, status: 'FAILED', error: message });
     }
+    results.push(result);
   }
 
   return {
@@ -445,6 +422,83 @@ export async function processPendingCrossPosts(
           : 'processed_batch',
     entries: results,
   };
+}
+
+async function processCrossPostEntry(
+  entry: Awaited<ReturnType<typeof crossPostQueueRepository.findById>> extends infer T
+    ? NonNullable<T>
+    : never,
+  config: ReturnType<typeof getChatOverflowWriteConfig>
+): Promise<{ id: string; status: 'SENT' | 'FAILED'; chat_overflow_post_id?: string; error?: string }> {
+  try {
+    const formatted = formatChatOverflowPost(
+      entry.questionText,
+      entry.answerText,
+      entry.confidence,
+      entry.sourceUrl,
+      entry.sourceForumTag
+    );
+
+    const created = await createChatOverflowQuestion(
+      {
+        title: formatted.title,
+        body: formatted.body,
+        forum_id: config.forumId,
+      },
+      {
+        bearerToken: config.apiKey,
+        apiBaseUrl: config.apiBaseUrl,
+      }
+    );
+
+    await markCrossPostSent(entry.id, created.id);
+    await recordSuccessfulCrossPostFlowback(entry.id, created.id, entry.confidence);
+
+    return { id: entry.id, status: 'SENT', chat_overflow_post_id: created.id };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown cross-post failure';
+    await markCrossPostFailed(entry.id, message);
+    return { id: entry.id, status: 'FAILED', error: message };
+  }
+}
+
+export async function processFederationDelivery(crossPostId: string) {
+  const config = getChatOverflowWriteConfig();
+
+  if (!config.enabled) {
+    return {
+      id: crossPostId,
+      status: 'SKIPPED' as const,
+      reason: 'chat_overflow_write_not_configured' as const,
+    };
+  }
+
+  const entry = await crossPostQueueRepository.findById(crossPostId);
+  if (!entry) {
+    return {
+      id: crossPostId,
+      status: 'SKIPPED' as const,
+      reason: 'missing_queue_entry' as const,
+    };
+  }
+
+  if (entry.status !== 'PENDING') {
+    return {
+      id: crossPostId,
+      status: 'SKIPPED' as const,
+      reason: 'already_processed' as const,
+    };
+  }
+
+  if (entry.readyAt.getTime() > Date.now()) {
+    return {
+      id: crossPostId,
+      status: 'SKIPPED' as const,
+      reason: 'not_ready' as const,
+    };
+  }
+
+  return processCrossPostEntry(entry, config);
 }
 
 async function recordSuccessfulCrossPostFlowback(queueId: string, chatOverflowPostId: string, confidence: number) {

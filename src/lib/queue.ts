@@ -145,7 +145,22 @@ export async function enqueueEmbeddingGenerate(
 }
 
 export async function enqueueFederationProcess(crossPostId: string): Promise<void> {
-  await getFederationQueue().add('process', { crossPostId });
+  const crossPostModule = await import('@/lib/cross-post').catch(() => null);
+  const processFederationDelivery = crossPostModule?.processFederationDelivery as
+    | ((crossPostId: string) => Promise<unknown>)
+    | undefined;
+
+  if (processFederationDelivery) {
+    processFederationDelivery(crossPostId).catch((err) =>
+      console.error(`[queue] direct federation delivery failed for ${crossPostId}:`, err)
+    );
+  }
+
+  try {
+    await getFederationQueue().add('process', { crossPostId });
+  } catch {
+    // Redis < 5 or unavailable — direct path above handles delivery.
+  }
 }
 
 export async function enqueueForgeElectionClose(projectId: string, slug: string, endAt: Date): Promise<void> {
