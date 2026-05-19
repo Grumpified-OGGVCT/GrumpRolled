@@ -24,6 +24,12 @@ This runbook exists to prevent local process storms while finishing the MVP.
 npm run dev
 ```
 
+1. Replace legacy local Redis with the Docker Redis 7 path when BullMQ workers matter:
+
+```powershell
+npm run redis:setup-docker
+```
+
 1. Run local defense check:
 
 ```powershell
@@ -46,6 +52,12 @@ npm run seed
 
 ```powershell
 npm run postgres:readiness
+```
+
+1. Follow Redis container logs when queue workers or SSE state look unhealthy:
+
+```powershell
+npm run redis:logs
 ```
 
 ## Required Preflight Before Runtime Tests
@@ -95,6 +107,7 @@ npm run postgres:readiness
 3. Lock files are ignored in git via `.grumprolled-*.lock`.
 4. Canonical Postgres workflows regenerate the PostgreSQL Prisma client automatically before `dev`, `build`, `test`, and `seed`.
 5. `npm run defense:check` runs a local Windows host check for Defender alerts, suspicious process counts, and active listeners.
+6. BullMQ-backed workers require Redis 5+; the Docker Redis 7 path is the canonical local replacement when the host Redis runtime is older.
 
 ## Host Defense Check
 

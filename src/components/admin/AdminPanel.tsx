@@ -183,6 +183,54 @@ type RuntimeStatusResponse = {
   };
 };
 
+type LaunchReadinessCheck = {
+  key: string;
+  label: string;
+  status: 'pass' | 'warn' | 'fail';
+  detail: string;
+  owner_action?: string;
+};
+
+type LaunchReadinessResponse = {
+  snapshot?: {
+    generated_at: string;
+    ready: boolean;
+    summary: {
+      pass: number;
+      warn: number;
+      fail: number;
+    };
+    checks: LaunchReadinessCheck[];
+    worker_health: {
+      key: string;
+      label: string;
+      status: RuntimeServiceStatus;
+      bullmq_ready: boolean;
+      redis_version: string | null;
+      worker_count: number;
+      started_at: string | null;
+      last_heartbeat_at: string | null;
+      heartbeat_age_ms: number | null;
+      last_error: string | null;
+      counters: {
+        startup_failures: number;
+        lifecycle_failures: number;
+        job_failures: number;
+      };
+    } | null;
+    failure_counters: Array<{
+      key: string;
+      count: number;
+      last_error: string | null;
+      last_at: string | null;
+    }>;
+    release_gate: {
+      blocking: string[];
+      warnings: string[];
+    };
+  };
+};
+
 type SafetyWindow = '24h' | '7d' | '30d';
 
 type QueueGroup = {
@@ -292,6 +340,9 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusResponse['snapshot'] | null>(null);
   const [runtimeStatusError, setRuntimeStatusError] = useState<string | null>(null);
   const [runtimeStatusRefreshing, setRuntimeStatusRefreshing] = useState(false);
+  const [launchReadiness, setLaunchReadiness] = useState<LaunchReadinessResponse['snapshot'] | null>(null);
+  const [launchReadinessError, setLaunchReadinessError] = useState<string | null>(null);
+  const [launchReadinessRefreshing, setLaunchReadinessRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('queue');
@@ -411,6 +462,40 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
     }
   }
 
+  async function fetchLaunchReadiness(options: { silent?: boolean } = {}) {
+    const { silent = false } = options;
+
+    if (!silent) {
+      setLaunchReadinessRefreshing(true);
+    }
+
+    try {
+      const response = await fetch(`${apiBase}/admin/launch-readiness`, { headers: adminHeaders });
+      const payload = (await response.json().catch(() => null)) as LaunchReadinessResponse | null;
+
+      if (response.status === 403) {
+        setLaunchReadiness(null);
+        setLaunchReadinessError('Owner session or admin key required to view launch readiness.');
+        return;
+      }
+
+      if (payload?.snapshot) {
+        setLaunchReadiness(payload.snapshot);
+        setLaunchReadinessError(null);
+        return;
+      }
+
+      throw new Error((payload as { error?: string } | null)?.error || `Launch readiness failed with ${response.status}`);
+    } catch (launchError) {
+      console.error('AdminPanel launch readiness error:', launchError);
+      setLaunchReadinessError(launchError instanceof Error ? launchError.message : 'Failed to load launch readiness status.');
+    } finally {
+      if (!silent) {
+        setLaunchReadinessRefreshing(false);
+      }
+    }
+  }
+
   async function fetchState() {
     setLoading(true);
     setError(null);
@@ -459,7 +544,10 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
       setCandidateHistory((candidateHistoryData?.candidates ?? []).filter((candidate: ExternalCandidate) => candidate.status !== 'QUEUED'));
       setFederationHealth(federationPayload);
       setContentBlocks(contentBlocksPayload);
-      await fetchRuntimeStatus({ silent: true });
+      await Promise.all([
+        fetchRuntimeStatus({ silent: true }),
+        fetchLaunchReadiness({ silent: true }),
+      ]);
     } catch (fetchError) {
       console.error('AdminPanel fetch error:', fetchError);
       setError('Failed to load admin state.');
@@ -474,9 +562,11 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
 
   useEffect(() => {
     void fetchRuntimeStatus();
+    void fetchLaunchReadiness();
 
     const intervalId = window.setInterval(() => {
       void fetchRuntimeStatus({ silent: true });
+      void fetchLaunchReadiness({ silent: true });
     }, 15000);
 
     return () => window.clearInterval(intervalId);
@@ -486,7 +576,7 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    if (tab && ['queue', 'federation', 'questions', 'analytics', 'safety'].includes(tab)) {
+    if (tab && ['queue', 'federation', 'questions', 'analytics', 'safety', 'launch'].includes(tab)) {
       setActiveTab(tab);
     }
     const qGroup = params.get('queueGroup');
@@ -897,6 +987,10 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
               Scan recent intake
               <span>{questions.length}</span>
             </Button>
+            <Button size="sm" variant="outline" className="w-full justify-between border-gray-700 text-gray-200" onClick={() => setActiveTab('launch')}>
+              Launch readiness
+              <span>fail {launchReadiness?.summary.fail ?? 0}</span>
+            </Button>
             <Button size="sm" variant="outline" className="w-full justify-between border-gray-700 text-gray-200" onClick={() => setActiveTab('safety')}>
               Review safety blocks
               <span>{contentBlocks?.summary?.total ?? 0}</span>
@@ -924,6 +1018,7 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
           <TabsTrigger value="queue">External Queue ({candidates.length})</TabsTrigger>
           <TabsTrigger value="federation">Federation</TabsTrigger>
           <TabsTrigger value="questions">Questions ({questions.length})</TabsTrigger>
+          <TabsTrigger value="launch">Launch</TabsTrigger>
           <TabsTrigger value="safety">Safety ({contentBlocks?.summary?.total ?? 0})</TabsTrigger>
           <TabsTrigger value="analytics">Ops</TabsTrigger>
         </TabsList>
@@ -1241,6 +1336,150 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
                     </Button>
                   </div>
                 ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="launch">
+          <Card className="bg-gray-800/50 border-gray-700">
+            <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <CardTitle className="text-white text-lg">Launch Readiness</CardTitle>
+                <CardDescription>Owner-facing checklist for Redis/BullMQ, worker heartbeat, env gates, and current runtime release blockers.</CardDescription>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                <Badge className={launchReadiness?.ready ? runtimeStatusTone('healthy') : runtimeStatusTone('degraded')}>
+                  {launchReadiness?.ready ? 'ready' : 'blocked'}
+                </Badge>
+                <span>
+                  {launchReadiness?.generated_at
+                    ? `last checked ${new Date(launchReadiness.generated_at).toLocaleTimeString()}`
+                    : 'waiting for first launch snapshot'}
+                </span>
+                <Button size="sm" variant="outline" className="border-gray-700 text-gray-200" onClick={() => void fetchLaunchReadiness()}>
+                  {launchReadinessRefreshing ? 'Checking…' : 'Refresh launch'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {launchReadinessError ? (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-sm text-amber-100">
+                  {launchReadinessError}
+                </div>
+              ) : !launchReadiness ? (
+                <p className="text-sm text-gray-400">Loading launch readiness…</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <StatCard title="Pass" value={launchReadiness.summary.pass} color="text-emerald-300" />
+                    <StatCard title="Warnings" value={launchReadiness.summary.warn} color="text-amber-300" />
+                    <StatCard title="Failures" value={launchReadiness.summary.fail} color="text-red-300" />
+                    <StatCard title="Failure Counters" value={launchReadiness.failure_counters.length} color="text-blue-300" />
+                  </div>
+
+                  <div className="space-y-3">
+                    {launchReadiness.checks.map((check) => (
+                      <div key={check.key} className="rounded-lg border border-gray-700 bg-gray-900/50 p-4 space-y-2">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-white">{check.label}</p>
+                            <p className="text-sm text-gray-300">{check.detail}</p>
+                          </div>
+                          <Badge className={check.status === 'pass' ? runtimeStatusTone('healthy') : check.status === 'warn' ? runtimeStatusTone('degraded') : runtimeStatusTone('down')}>
+                            {check.status}
+                          </Badge>
+                        </div>
+                        {check.owner_action && <p className="text-xs text-gray-400">Owner action: {check.owner_action}</p>}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                    <Card className="bg-gray-900/40 border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-white">Worker Health</CardTitle>
+                        <CardDescription>Heartbeat and transport state for the BullMQ worker process.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {!launchReadiness.worker_health ? (
+                          <p className="text-sm text-gray-400">No worker heartbeat recorded yet.</p>
+                        ) : (
+                          <div className="space-y-2 text-sm text-gray-300">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="font-medium text-white">{launchReadiness.worker_health.label}</p>
+                              <Badge className={runtimeStatusTone(launchReadiness.worker_health.status)}>{launchReadiness.worker_health.status}</Badge>
+                            </div>
+                            <p>Redis version: {launchReadiness.worker_health.redis_version || 'unknown'}</p>
+                            <p>BullMQ ready: {String(launchReadiness.worker_health.bullmq_ready)}</p>
+                            <p>Worker count: {launchReadiness.worker_health.worker_count}</p>
+                            <p>Started: {launchReadiness.worker_health.started_at ? new Date(launchReadiness.worker_health.started_at).toLocaleString() : 'n/a'}</p>
+                            <p>Last heartbeat: {launchReadiness.worker_health.last_heartbeat_at ? new Date(launchReadiness.worker_health.last_heartbeat_at).toLocaleString() : 'never'}</p>
+                            <p>Heartbeat age ms: {launchReadiness.worker_health.heartbeat_age_ms ?? 'n/a'}</p>
+                            {launchReadiness.worker_health.last_error && <p className="text-red-200">Last error: {launchReadiness.worker_health.last_error}</p>}
+                            <div className="grid grid-cols-3 gap-2 pt-2 text-xs text-gray-400">
+                              <span>startup {launchReadiness.worker_health.counters.startup_failures}</span>
+                              <span>lifecycle {launchReadiness.worker_health.counters.lifecycle_failures}</span>
+                              <span>jobs {launchReadiness.worker_health.counters.job_failures}</span>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-gray-900/40 border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-white">Release Gate</CardTitle>
+                        <CardDescription>Blocking and warning lanes before launch claims are allowed.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4 text-sm text-gray-300">
+                        <div>
+                          <p className="font-medium text-white">Blocking</p>
+                          {launchReadiness.release_gate.blocking.length === 0 ? (
+                            <p className="mt-1 text-gray-400">No blocking launch gates.</p>
+                          ) : (
+                            <div className="mt-1 space-y-1 text-red-200">
+                              {launchReadiness.release_gate.blocking.map((item) => (
+                                <p key={item}>• {item}</p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-white">Warnings</p>
+                          {launchReadiness.release_gate.warnings.length === 0 ? (
+                            <p className="mt-1 text-gray-400">No warning launch gates.</p>
+                          ) : (
+                            <div className="mt-1 space-y-1 text-amber-100">
+                              {launchReadiness.release_gate.warnings.map((item) => (
+                                <p key={item}>• {item}</p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-white">Structured failure counters</p>
+                          {launchReadiness.failure_counters.length === 0 ? (
+                            <p className="mt-1 text-gray-400">No recorded runtime failures yet.</p>
+                          ) : (
+                            <div className="mt-2 space-y-2">
+                              {launchReadiness.failure_counters.map((counter) => (
+                                <div key={counter.key} className="rounded border border-gray-700 bg-gray-950/60 p-2">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="font-medium text-gray-200">{counter.key}</p>
+                                    <span className="text-xs text-gray-400">count {counter.count}</span>
+                                  </div>
+                                  {counter.last_error && <p className="mt-1 text-xs text-red-200 break-words">{counter.last_error}</p>}
+                                  {counter.last_at && <p className="mt-1 text-[11px] text-gray-500">last seen {new Date(counter.last_at).toLocaleString()}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

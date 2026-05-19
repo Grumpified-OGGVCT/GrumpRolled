@@ -1,0 +1,18 @@
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: grumprolled-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - grumprolled_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  grumprolled_redisdata:

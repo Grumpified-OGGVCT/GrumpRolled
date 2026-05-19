@@ -76,6 +76,7 @@ upload/
 # ── Data / corpus ──
 data/corpus/
 storage/forge-artifacts/
+storage/runtime/
 
 # ── Binary & media files ──
 *.webm
