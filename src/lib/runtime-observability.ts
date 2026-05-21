@@ -195,6 +195,26 @@ export function resolveRuntimeEventsForSource(lane: RuntimeEventLane, source: st
   });
 }
 
+export function resolveRuntimeEvent(key: string) {
+  updateState((state) => {
+    const now = new Date().toISOString();
+    state.events = state.events.map((event) => {
+      if (event.key !== key || event.status !== 'active') {
+        return event;
+      }
+
+      return {
+        ...event,
+        status: 'resolved',
+        last_at: now,
+        resolved_at: now,
+      };
+    });
+
+    return state;
+  });
+}
+
 export function upsertWorkerHealth(workerKey: string, snapshot: Partial<WorkerHealthSnapshot> & { label: string }) {
   updateState((state) => {
     const current = state.workers[workerKey] || {

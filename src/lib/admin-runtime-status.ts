@@ -4,6 +4,7 @@ import { getChatOverflowWriteConfig } from '@/lib/cross-post';
 import { db } from '@/lib/db';
 import { getProviderInventory, healthCheckProviders } from '@/lib/llm-provider-router';
 import { attachRedisNoiseGuard, createRedisOptions, getRedisUrl, parseRedisVersion, redisSupportsBullMQ } from '@/lib/redis-config';
+import { recordRuntimeEvent, resolveRuntimeEvent } from '@/lib/runtime-observability';
 
 export type RuntimeServiceStatus = 'healthy' | 'degraded' | 'down' | 'disabled';
 
@@ -47,6 +48,23 @@ export interface RuntimeStatusSnapshot {
     disabled: number;
   };
   services: RuntimeServiceSnapshot[];
+}
+
+function syncRuntimeServiceEvent(service: RuntimeServiceSnapshot) {
+  const eventKey = `runtime:${service.key}`;
+
+  if (service.status === 'degraded' || service.status === 'down') {
+    recordRuntimeEvent({
+      key: eventKey,
+      lane: 'runtime',
+      source: service.key,
+      severity: service.status === 'down' ? 'critical' : 'warning',
+      message: service.detail,
+    });
+    return;
+  }
+
+  resolveRuntimeEvent(eventKey);
 }
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
@@ -428,6 +446,8 @@ export async function getAdminRuntimeStatus(): Promise<RuntimeStatusSnapshot> {
     checkProviders(),
     Promise.resolve(checkFederationWritePath()),
   ]);
+
+  services.forEach(syncRuntimeServiceEvent);
 
   const summary = services.reduce(
     (acc, service) => {

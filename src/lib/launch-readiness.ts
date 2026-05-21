@@ -1,5 +1,5 @@
 import { getAdminRuntimeStatus } from '@/lib/admin-runtime-status';
-import { getRuntimeObservabilitySnapshot } from '@/lib/runtime-observability';
+import { getRuntimeObservabilitySnapshot, recordRuntimeEvent, resolveRuntimeEvent } from '@/lib/runtime-observability';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -19,6 +19,30 @@ export interface ReleaseGateCheck {
   status: LaunchCheckStatus;
   detail: string;
   owner_action?: string;
+}
+
+function syncReleaseGateEvent(check: ReleaseGateCheck) {
+  const eventKey = `release-gate:${check.key}`;
+  const lane = check.key === 'deployment-assets'
+    ? 'deployment'
+    : check.key === 'rollback-discipline'
+      ? 'rollback'
+      : check.key === 'secrets-guardrails'
+        ? 'secrets'
+        : 'release-gate';
+
+  if (check.status === 'warn' || check.status === 'fail') {
+    recordRuntimeEvent({
+      key: eventKey,
+      lane,
+      source: check.key,
+      severity: check.status === 'fail' ? 'critical' : 'warning',
+      message: check.detail,
+    });
+    return;
+  }
+
+  resolveRuntimeEvent(eventKey);
 }
 
 function requiredEnvCheck(key: string) {
@@ -151,40 +175,9 @@ export async function getLaunchReadinessSnapshot() {
 
   const blocking = checks.filter((check) => check.status === 'fail');
   const warnings = checks.filter((check) => check.status === 'warn');
-  const runtimeEvents = runtime.services
-    .filter((service) => service.status === 'degraded' || service.status === 'down')
-    .map((service) => ({
-      key: `runtime:${service.key}`,
-      lane: 'runtime' as const,
-      source: service.key,
-      severity: service.status === 'down' ? 'critical' as const : 'warning' as const,
-      status: 'active' as const,
-      message: service.detail,
-      first_at: nowIso,
-      last_at: nowIso,
-      resolved_at: null,
-    }));
-  const releaseGateEvents = checks
-    .filter((check) => check.status === 'warn' || check.status === 'fail')
-    .map((check) => ({
-      key: `release-gate:${check.key}`,
-      lane: ['deployment-assets'].includes(check.key)
-        ? 'deployment'
-        : ['rollback-discipline'].includes(check.key)
-          ? 'rollback'
-          : ['secrets-guardrails'].includes(check.key)
-            ? 'secrets'
-            : 'release-gate',
-      source: check.key,
-      severity: check.status === 'fail' ? 'critical' as const : 'warning' as const,
-      status: 'active' as const,
-      message: check.detail,
-      first_at: nowIso,
-      last_at: nowIso,
-      resolved_at: null,
-    }));
+  releaseGateChecks.forEach(syncReleaseGateEvent);
   const persistedEvents = observability.events;
-  const activeEvents = [...runtimeEvents, ...releaseGateEvents, ...persistedEvents.filter((event) => event.status === 'active')];
+  const activeEvents = persistedEvents.filter((event) => event.status === 'active');
   const resolvedEvents = persistedEvents.filter((event) => event.status === 'resolved');
   const recentFailureCounters = Object.values(observability.failure_counters)
     .map((counter) => {
