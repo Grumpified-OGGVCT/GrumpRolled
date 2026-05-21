@@ -3,11 +3,27 @@ import { join } from 'node:path';
 
 export type ObservabilityStatus = 'healthy' | 'degraded' | 'down';
 
+export type RuntimeEventLane = 'worker' | 'runtime' | 'release-gate' | 'secrets' | 'deployment' | 'rollback';
+export type RuntimeEventSeverity = 'info' | 'warning' | 'critical';
+export type RuntimeEventStatus = 'active' | 'resolved';
+
 export interface RuntimeFailureCounter {
   key: string;
   count: number;
   last_error: string | null;
   last_at: string | null;
+}
+
+export interface RuntimeObservabilityEvent {
+  key: string;
+  lane: RuntimeEventLane;
+  source: string;
+  severity: RuntimeEventSeverity;
+  status: RuntimeEventStatus;
+  message: string;
+  first_at: string;
+  last_at: string;
+  resolved_at: string | null;
 }
 
 export interface WorkerHealthSnapshot {
@@ -34,10 +50,13 @@ interface RuntimeObservabilityState {
   updated_at: string;
   failure_counters: Record<string, RuntimeFailureCounter>;
   workers: Record<string, WorkerHealthSnapshot>;
+  events: RuntimeObservabilityEvent[];
 }
 
 const runtimeDir = join(process.cwd(), 'storage', 'runtime');
 const stateFile = join(runtimeDir, 'runtime-observability.json');
+const EVENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_EVENT_COUNT = 200;
 
 function ensureRuntimeDir() {
   if (!existsSync(runtimeDir)) {
@@ -50,7 +69,15 @@ function defaultState(): RuntimeObservabilityState {
     updated_at: new Date(0).toISOString(),
     failure_counters: {},
     workers: {},
+    events: [],
   };
+}
+
+function pruneEvents(events: RuntimeObservabilityEvent[]) {
+  const cutoff = Date.now() - EVENT_RETENTION_MS;
+  return events
+    .filter((event) => new Date(event.last_at).getTime() >= cutoff)
+    .slice(-MAX_EVENT_COUNT);
 }
 
 function readState(): RuntimeObservabilityState {
@@ -65,6 +92,7 @@ function readState(): RuntimeObservabilityState {
       updated_at: parsed.updated_at || new Date(0).toISOString(),
       failure_counters: parsed.failure_counters || {},
       workers: parsed.workers || {},
+      events: pruneEvents(parsed.events || []),
     };
   } catch {
     return defaultState();
@@ -79,6 +107,7 @@ function writeState(state: RuntimeObservabilityState) {
 function updateState(mutator: (state: RuntimeObservabilityState) => RuntimeObservabilityState) {
   const next = mutator(readState());
   next.updated_at = new Date().toISOString();
+  next.events = pruneEvents(next.events);
   writeState(next);
 }
 
@@ -103,6 +132,64 @@ export function recordRuntimeFailure(key: string, error: unknown) {
       last_error: message,
       last_at: new Date().toISOString(),
     };
+
+    return state;
+  });
+}
+
+export function recordRuntimeEvent(event: {
+  key: string;
+  lane: RuntimeEventLane;
+  source: string;
+  severity: RuntimeEventSeverity;
+  message: string;
+}) {
+  updateState((state) => {
+    const now = new Date().toISOString();
+    const existingIndex = state.events.findIndex((current) => current.key === event.key && current.status === 'active');
+
+    if (existingIndex >= 0) {
+      const existing = state.events[existingIndex];
+      state.events[existingIndex] = {
+        ...existing,
+        severity: event.severity,
+        message: event.message,
+        last_at: now,
+        resolved_at: null,
+      };
+      return state;
+    }
+
+    state.events.push({
+      key: event.key,
+      lane: event.lane,
+      source: event.source,
+      severity: event.severity,
+      status: 'active',
+      message: event.message,
+      first_at: now,
+      last_at: now,
+      resolved_at: null,
+    });
+    return state;
+  });
+}
+
+export function resolveRuntimeEventsForSource(lane: RuntimeEventLane, source: string) {
+  updateState((state) => {
+    const now = new Date().toISOString();
+    state.events = state.events.map((event) => {
+      if (event.lane !== lane || event.source !== source || event.status !== 'active') {
+        return event;
+      }
+
+      return {
+        ...event,
+        status: 'resolved',
+        last_at: now,
+        resolved_at: now,
+      };
+    });
 
     return state;
   });
@@ -155,6 +242,8 @@ export function touchWorkerHeartbeat(workerKey: string) {
     };
     return state;
   });
+
+  resolveRuntimeEventsForSource('worker', workerKey);
 }
 
 export function recordWorkerFailure(workerKey: string, kind: 'startup_failures' | 'lifecycle_failures' | 'job_failures', error: unknown) {
@@ -178,5 +267,12 @@ export function recordWorkerFailure(workerKey: string, kind: 'startup_failures' 
     return state;
   });
 
+  recordRuntimeEvent({
+    key: `worker:${workerKey}:${kind}`,
+    lane: 'worker',
+    source: workerKey,
+    severity: kind === 'startup_failures' ? 'critical' : kind === 'lifecycle_failures' ? 'warning' : 'warning',
+    message,
+  });
   recordRuntimeFailure(`worker:${workerKey}:${kind}`, message);
 }

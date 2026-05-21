@@ -191,6 +191,18 @@ type LaunchReadinessCheck = {
   owner_action?: string;
 };
 
+type RuntimeLaneEvent = {
+  key: string;
+  lane: 'worker' | 'runtime' | 'release-gate' | 'secrets' | 'deployment' | 'rollback';
+  source: string;
+  severity: 'info' | 'warning' | 'critical';
+  status: 'active' | 'resolved';
+  message: string;
+  first_at: string;
+  last_at: string;
+  resolved_at: string | null;
+};
+
 type LaunchReadinessResponse = {
   snapshot?: {
     generated_at: string;
@@ -220,10 +232,16 @@ type LaunchReadinessResponse = {
     } | null;
     failure_counters: Array<{
       key: string;
-      count: number;
+      count_lifetime: number;
+      count_recent_24h: number;
+      count_historical: number;
       last_error: string | null;
       last_at: string | null;
     }>;
+    event_lanes: {
+      active: RuntimeLaneEvent[];
+      resolved_recent: RuntimeLaneEvent[];
+    };
     release_gate: {
       blocking: string[];
       warnings: string[];
@@ -1467,8 +1485,9 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
                                 <div key={counter.key} className="rounded border border-gray-700 bg-gray-950/60 p-2">
                                   <div className="flex items-center justify-between gap-3">
                                     <p className="font-medium text-gray-200">{counter.key}</p>
-                                    <span className="text-xs text-gray-400">count {counter.count}</span>
+                                    <span className="text-xs text-gray-400">recent {counter.count_recent_24h} / lifetime {counter.count_lifetime}</span>
                                   </div>
+                                  <p className="mt-1 text-[11px] text-gray-500">historical {counter.count_historical}</p>
                                   {counter.last_error && <p className="mt-1 text-xs text-red-200 break-words">{counter.last_error}</p>}
                                   {counter.last_at && <p className="mt-1 text-[11px] text-gray-500">last seen {new Date(counter.last_at).toLocaleString()}</p>}
                                 </div>
@@ -1476,6 +1495,56 @@ export default function AdminPanel({ apiBase = '/api/v1' }: AdminPanelProps) {
                             </div>
                           )}
                         </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <Card className="bg-gray-900/40 border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-white">Active incident lanes</CardTitle>
+                        <CardDescription>Current runtime and release-gate issues that still need owner attention.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm text-gray-300">
+                        {launchReadiness.event_lanes.active.length === 0 ? (
+                          <p className="text-gray-400">No active incidents.</p>
+                        ) : (
+                          launchReadiness.event_lanes.active.map((event) => (
+                            <div key={event.key} className="rounded border border-gray-700 bg-gray-950/60 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="font-medium text-gray-100">{event.lane} · {event.source}</p>
+                                <Badge className={event.severity === 'critical' ? runtimeStatusTone('down') : runtimeStatusTone('degraded')}>
+                                  {event.severity}
+                                </Badge>
+                              </div>
+                              <p className="mt-1 text-xs text-gray-300 break-words">{event.message}</p>
+                              <p className="mt-1 text-[11px] text-gray-500">first seen {new Date(event.first_at).toLocaleString()} · last seen {new Date(event.last_at).toLocaleString()}</p>
+                            </div>
+                          ))
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-gray-900/40 border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-white">Resolved recent incidents</CardTitle>
+                        <CardDescription>Recent incidents that have cleared so the panel separates current health from prior failures.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm text-gray-300">
+                        {launchReadiness.event_lanes.resolved_recent.length === 0 ? (
+                          <p className="text-gray-400">No recently resolved incidents.</p>
+                        ) : (
+                          launchReadiness.event_lanes.resolved_recent.map((event) => (
+                            <div key={`${event.key}-${event.resolved_at}`} className="rounded border border-gray-700 bg-gray-950/60 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="font-medium text-gray-100">{event.lane} · {event.source}</p>
+                                <Badge className={runtimeStatusTone('healthy')}>resolved</Badge>
+                              </div>
+                              <p className="mt-1 text-xs text-gray-300 break-words">{event.message}</p>
+                              <p className="mt-1 text-[11px] text-gray-500">resolved {event.resolved_at ? new Date(event.resolved_at).toLocaleString() : 'n/a'}</p>
+                            </div>
+                          ))
+                        )}
                       </CardContent>
                     </Card>
                   </div>
